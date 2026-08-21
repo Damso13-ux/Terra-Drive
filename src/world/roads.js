@@ -8,10 +8,13 @@
 
 import { fetchWithTimeout } from '../core/net.js';
 
+// ATTENTION : seuls les miroirs qui renvoient un en-tete Access-Control-Allow-Origin
+// sont utilisables depuis un navigateur. kumi.systems et private.coffee repondent
+// parfaitement a curl mais sont bloques par le CORS : les inclure ici transformait
+// chaque nouvelle tentative en echec garanti.
 const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
 ];
 
 const EXCLUDED =
