@@ -8,13 +8,17 @@
 
 import { fetchWithTimeout } from '../core/net.js';
 
-// ATTENTION : seuls les miroirs qui renvoient un en-tete Access-Control-Allow-Origin
-// sont utilisables depuis un navigateur. kumi.systems et private.coffee repondent
-// parfaitement a curl mais sont bloques par le CORS : les inclure ici transformait
-// chaque nouvelle tentative en echec garanti.
+// Choisir un miroir Overpass demande de verifier DEUX choses, et les deux ont deja
+// piege ce projet :
+//   1. l'en-tete Access-Control-Allow-Origin. kumi.systems et private.coffee repondent
+//      parfaitement a curl mais sont bloques par le CORS du navigateur ;
+//   2. la couverture geographique. overpass.osm.ch renvoie un HTTP 200 avec zero
+//      element hors de Suisse : une panne totalement silencieuse.
+// maps.mail.ru est un miroir mondial opere par VK ; les requetes envoyees sont de
+// simples emprises geographiques publiques, mais il est trivial de le retirer d'ici.
 const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 
 const EXCLUDED =
@@ -109,7 +113,14 @@ export class RoadNetwork {
         },
         45000
       );
-      return res.json();
+      const json = await res.json();
+      const count = (json.elements || []).length;
+      // Overpass signale ses erreurs internes dans `remark`, avec un HTTP 200.
+      if (json.remark && count === 0) throw new Error('overpass: ' + json.remark);
+      // Zero element peut vouloir dire "pas de route ici" comme "mauvais miroir".
+      // Tant qu'on n'a pas interroge tous les miroirs, on considere que c'est un echec.
+      if (count === 0 && attempt < MIRRORS.length) throw new Error('reponse vide');
+      return json;
     };
 
     this.queue
@@ -268,40 +279,41 @@ export class RoadNetwork {
   queryGround(x, z, extra = 0, falloff = SHOULDER) {
     const gx = Math.floor(x / GRID);
     const gz = Math.floor(z / GRID);
+    // Un corridor elargi peut deborder sur les cellules voisines.
+    const span = Math.ceil((extra + falloff) / GRID);
     let best = null;
     let bestScore = Infinity;
-    // Un corridor elargi peut deborder sur les cellules voisines.
-    const span = extra + falloff > 0 ? Math.ceil((extra + falloff) / GRID) : 0;
+
     for (let cz = gz - span; cz <= gz + span; cz++) {
-    for (let cx = gx - span; cx <= gx + span; cx++) {
-    const list = this.grid.get(cx + ',' + cz);
-    if (!list) continue;
-    for (let k = 0; k < list.length; k += 2) {
-      const way = list[k];
-      const i = list[k + 1];
-      const x1 = way.pts[i * 2], z1 = way.pts[i * 2 + 1];
-      const x2 = way.pts[i * 2 + 2], z2 = way.pts[i * 2 + 3];
-      const dx = x2 - x1, dz = z2 - z1;
-      const len2 = dx * dx + dz * dz;
-      if (len2 < 1e-6) continue;
-      let t = ((x - x1) * dx + (z - z1) * dz) / len2;
-      t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const px = x1 + dx * t, pz = z1 + dz * t;
-      const dist = Math.hypot(x - px, z - pz);
-      const inner = way.halfWidth + extra;
-      if (dist > inner + falloff) continue;
-      // A distance egale on prefere l'axe de rang le plus eleve : une nationale
-      // l'emporte sur la voie de service qui la longe.
-      const score = dist - (8 - way.rank) * 0.35;
-      if (score < bestScore) {
-        bestScore = score;
-        this.updateProfile(way);
-        const y = way.y[i] + (way.y[i + 1] - way.y[i]) * t;
-        const raw = dist <= inner ? 1 : 1 - (dist - inner) / falloff;
-        best = { y, grip: way.grip, blend: raw * raw * (3 - 2 * raw), way };
+      for (let cx = gx - span; cx <= gx + span; cx++) {
+        const list = this.grid.get(cx + ',' + cz);
+        if (!list) continue;
+        for (let k = 0; k < list.length; k += 2) {
+          const way = list[k];
+          const i = list[k + 1];
+          const x1 = way.pts[i * 2], z1 = way.pts[i * 2 + 1];
+          const x2 = way.pts[i * 2 + 2], z2 = way.pts[i * 2 + 3];
+          const dx = x2 - x1, dz = z2 - z1;
+          const len2 = dx * dx + dz * dz;
+          if (len2 < 1e-6) continue;
+          let t = ((x - x1) * dx + (z - z1) * dz) / len2;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const px = x1 + dx * t, pz = z1 + dz * t;
+          const dist = Math.hypot(x - px, z - pz);
+          const inner = way.halfWidth + extra;
+          if (dist > inner + falloff) continue;
+          // A distance egale on prefere l'axe de rang le plus eleve : une nationale
+          // l'emporte sur la voie de service qui la longe.
+          const score = dist - (8 - way.rank) * 0.35;
+          if (score < bestScore) {
+            bestScore = score;
+            this.updateProfile(way);
+            const y = way.y[i] + (way.y[i + 1] - way.y[i]) * t;
+            const raw = dist <= inner ? 1 : 1 - (dist - inner) / falloff;
+            best = { y, grip: way.grip, blend: raw * raw * (3 - 2 * raw), way };
+          }
+        }
       }
-    }
-    }
     }
     return best;
   }

@@ -63,7 +63,7 @@ export class Hud {
     this.diagEl.style.display = this.showDiag ? '' : 'none';
   }
 
-  update(dt, { vehicle, roads, terrain, queue, heightfield, placeName }) {
+  update(dt, { vehicle, roads, terrain, queue, roadQueue, heightfield, placeName }) {
     this.fps += (1 / Math.max(dt, 1e-4) - this.fps) * 0.08;
 
     if (this._toastTimer > 0) {
@@ -83,14 +83,14 @@ export class Hud {
     this.rpmEl.classList.toggle('redline', rev > 0.92);
     if (placeName !== undefined) this.placeEl.textContent = placeName;
 
-    if (this.showDiag) this._drawDiag({ roads, terrain, queue, heightfield, vehicle });
+    if (this.showDiag) this._drawDiag({ roads, terrain, queue, roadQueue, heightfield });
     this._drawMinimap(vehicle, roads);
   }
 
-  _drawDiag({ roads, terrain, queue, heightfield, vehicle }) {
-    const q = queue.stats;
-    const pending = queue.queued + queue.active;
-    const warn = q.failed > 0;
+  _drawDiag({ roads, terrain, queue, roadQueue, heightfield }) {
+    const pending = queue.queued + queue.active + roadQueue.queued + roadQueue.active;
+    const failed = queue.stats.failed + roadQueue.stats.failed;
+    const warn = failed > 0;
     const quality = heightfield.lastQuality;
     const qualityLabel = quality === 2 ? 'fine' : quality === 1 ? 'approchee' : 'absente';
     this.diagEl.innerHTML = `
@@ -99,7 +99,7 @@ export class Hud {
       <div class="diag-row"><span>chunks</span><b>${terrain.stats.chunks}</b></div>
       <div class="diag-row"><span>routes</span><b>${roads.stats.ways}</b></div>
       <div class="diag-row"><span>en attente</span><b>${pending}</b></div>
-      <div class="diag-row"><span>echecs</span><b class="${warn ? 'warn' : ''}">${q.failed}</b></div>
+      <div class="diag-row"><span>echecs</span><b class="${warn ? 'warn' : ''}">${failed}</b></div>
     `;
   }
 

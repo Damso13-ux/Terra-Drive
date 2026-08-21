@@ -17,6 +17,7 @@ import { Hud } from './ui/hud.js';
 import { Picker } from './ui/picker.js';
 
 const ROAD_RADIUS = 2600; // rayon de chargement du reseau routier, en metres
+const SPAWN_SEARCH = 350; // distance max pour trouver une route au point de depart
 
 class Boot {
   constructor(el) {
@@ -99,10 +100,13 @@ class Game {
   async start(lon, lat, name, boot) {
     this.placeName = name || `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     this.proj = new Projection(lon, lat);
+    // Tuiles et Overpass ont des contraintes opposees : les tuiles aiment le
+    // parallelisme, Overpass limite par adresse IP et se ferme si on le bouscule.
     this.queue = new RequestQueue({ concurrency: 10, retries: 3 });
+    this.roadQueue = new RequestQueue({ concurrency: 2, retries: 4, baseDelay: 1400 });
 
     this.heightfield = new Heightfield(this.proj, this.queue);
-    this.roads = new RoadNetwork(this.proj, this.heightfield, this.queue);
+    this.roads = new RoadNetwork(this.proj, this.heightfield, this.roadQueue);
     this.ground = new Ground(this.heightfield, this.roads);
 
     // ---- 1. filet de securite altimetrique -------------------------------
@@ -163,17 +167,28 @@ class Game {
     return true;
   }
 
-  /** Attend qu'au moins une cellule de routes soit exploitable. */
+  /**
+   * Attend une route reellement UTILISABLE sous le point de depart.
+   *
+   * Se contenter de `stats.ways > 0` etait une course perdue d'avance : les cellules
+   * arrivent dans le desordre, et celle situee a 1,2 km repondait souvent en premier.
+   * La voiture etait alors posee a l'aveugle sur l'origine, en plein champ.
+   */
   waitForRoads() {
     return new Promise((resolve, reject) => {
-      if (this.roads.stats.ways > 0) return resolve(true);
       const started = performance.now();
       const check = () => {
-        if (this.roads.stats.ways > 0) return resolve(true);
-        // toutes les cellules demandees ont echoue ou sont vides
+        if (this.roads.nearestRoad(0, 0, SPAWN_SEARCH)) return resolve(true);
         const states = [...this.roads.cells.values()];
-        if (states.length && states.every((s) => s !== 'loading')) return reject(new Error('vide'));
-        if (performance.now() - started > 24000) return reject(new Error('timeout'));
+        const settled = states.length && states.every((s) => s !== 'loading');
+        if (settled) {
+          // plus rien en vol : soit il n'y a vraiment aucune route ici, soit elles
+          // sont toutes trop loin du point vise
+          return this.roads.stats.ways > 0
+            ? resolve(true)
+            : reject(new Error('aucune route a proximite'));
+        }
+        if (performance.now() - started > 24000) return reject(new Error('delai depasse'));
         setTimeout(check, 250);
       };
       check();
@@ -182,15 +197,47 @@ class Game {
 
   /** Place la voiture sur la route la plus proche, ou a defaut sur le terrain. */
   spawn() {
-    const near = this.roads.nearestRoad(0, 0, 400);
+    const near = this.roads.nearestRoad(0, 0, SPAWN_SEARCH);
     if (near) {
       this.vehicle.placeAt(near.x, near.y, near.z, near.heading);
       this.spawnPoint = { x: near.x, y: near.y, z: near.z, heading: near.heading };
+      this.spawnedOnRoad = true;
     } else {
       const y = this.ground.height(0, 0);
       this.vehicle.placeAt(0, y, 0, 0);
       this.spawnPoint = { x: 0, y, z: 0, heading: 0 };
+      this.spawnedOnRoad = false;
     }
+    this.rescueTimer = 0;
+  }
+
+  /**
+   * Rattrapage : si Overpass a ete trop lent au demarrage, la voiture a ete posee en
+   * plein champ. Des que les routes arrivent, on l'y replace -- mais uniquement tant
+   * que le joueur n'a pas pris la main, pour ne jamais teleporter quelqu'un qui roule.
+   */
+  rescueSpawn(dt) {
+    if (this.spawnedOnRoad) return;
+    this.rescueTimer += dt;
+    if (this.rescueTimer < 1) return;
+    this.rescueTimer = 0;
+
+    const touched =
+      this.vehicle.odometer > 25 ||
+      this.input.state.throttle > 0.02 ||
+      this.input.state.brake > 0.02 ||
+      Math.abs(this.input.state.steer) > 0.02;
+    if (touched) {
+      this.spawnedOnRoad = true; // le joueur conduit : on ne touche plus a rien
+      return;
+    }
+
+    const near = this.roads.nearestRoad(0, 0, SPAWN_SEARCH);
+    if (!near) return;
+    this.vehicle.placeAt(near.x, near.y, near.z, near.heading);
+    this.spawnPoint = { x: near.x, y: near.y, z: near.z, heading: near.heading };
+    this.spawnedOnRoad = true;
+    this.hud.toast('Routes chargees : mise en place sur la chaussee');
   }
 
   /** Remet la voiture sur la route la plus proche de sa position actuelle. */
@@ -267,6 +314,8 @@ class Game {
       this.vehicle.update(dt);
     }
 
+    this.rescueSpawn(dt);
+
     const p = this.vehicle.position;
     this.heightfield.tick(dt);
     this.terrain.update(p.x, p.z);
@@ -281,6 +330,7 @@ class Game {
       roads: this.roads,
       terrain: this.terrain,
       queue: this.queue,
+      roadQueue: this.roadQueue,
       heightfield: this.heightfield,
       placeName: this.placeName,
     });
