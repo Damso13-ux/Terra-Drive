@@ -105,7 +105,7 @@ export class Hud {
     this._drawMinimap(vehicle, roads);
   }
 
-  _drawDiag({ roads, terrain, queue, roadQueue, heightfield, vehicle, camera, frames }) {
+  _drawDiag({ roads, terrain, queue, roadQueue, heightfield, vehicle, camera, frames, renderedGround, textureAverage }) {
     const pending = queue.queued + queue.active + roadQueue.queued + roadQueue.active;
     const failed = queue.stats.failed + roadQueue.stats.failed;
     const quality = heightfield.lastQuality;
@@ -132,6 +132,11 @@ export class Hud {
       row('chunks', terrain.stats.chunks, terrain.stats.chunks === 0) +
       row('routes', roads.stats.ways, roads.stats.ways === 0) +
       row('reseau', pending + ' / ' + failed + ' ko', failed > 0) +
+      row('textures', terrain.stats.textured + ' / ' + terrain.stats.textureFailed + ' ko',
+          terrain.stats.textureFailed > 0) +
+      // Les deux valeurs qui tranchent entre "texture noire" et "lumiere nulle".
+      row('texture moy', textureAverage || '...', textureAverage === 'rgb(0,0,0)') +
+      row('sol rendu', renderedGround || '...', renderedGround === '0,0,0') +
       (sous ? row('position', 'SOUS LE SOL', true) : '');
   }
 

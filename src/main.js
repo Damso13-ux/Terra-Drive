@@ -562,6 +562,8 @@ class Game {
       vehicle: this.vehicle,
       camera: this.camera,
       frames: this.frames,
+      renderedGround: this.renderedGround,
+      textureAverage: this.textureAverage,
       roads: this.roads,
       terrain: this.terrain,
       queue: this.queue,
@@ -571,6 +573,37 @@ class Game {
     });
 
     this.renderer.render(this.scene, this.camera);
+
+    // Echantillonnage de controle, juste apres le rendu : sans
+    // preserveDrawingBuffer le contenu du canvas n'est lisible que maintenant.
+    this._probeTimer = (this._probeTimer || 0) + dt;
+    if (this._probeTimer > 0.5) {
+      this._probeTimer = 0;
+      this.renderedGround = probeGround(this.renderer.domElement);
+      if (!this.textureAverage) {
+        const chunk = [...this.terrain.chunks.values()].find((c) => c.texture && c.texture.image);
+        if (chunk) this.textureAverage = averageColour(chunk.texture.image);
+      }
+    }
+  }
+}
+
+/** Couleur moyenne du bas de l'image : c'est le sol, juste devant la voiture. */
+function probeGround(canvas) {
+  try {
+    const W = 60, H = 40;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(canvas, 0, 0, W, H);
+    const d = ctx.getImageData(0, Math.floor(H * 0.62), W, Math.floor(H * 0.3)).data;
+    let r = 0, g = 0, b = 0;
+    const n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    return `${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)}`;
+  } catch {
+    return 'illisible';
   }
 }
 

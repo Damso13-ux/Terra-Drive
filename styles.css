@@ -715,3 +715,50 @@ button.primary:disabled {
 
 /* Le panneau de coin ne doit jamais passer sous les pedales. */
 #hud.compact .hud-topright { max-width: 46vw; }
+
+/* Le panneau de diagnostic passait sous les pedales, cote droit. Sur telephone
+   il vit desormais a gauche, sous les boutons d'action, ou rien ne le couvre.
+   Il n'intercepte aucun toucher : #hud est en pointer-events: none. */
+@media (pointer: coarse) {
+  #hud.compact .hud-topright { max-width: none; }
+  #hud.compact .diag {
+    position: fixed;
+    left: calc(14px + env(safe-area-inset-left));
+    top: calc(70px + env(safe-area-inset-top));
+    min-width: 172px;
+    max-width: 58vw;
+  }
+}
+
+/* Le menu depassait sous le bord bas de l'ecran, sans defilement possible :
+   #touch impose touch-action: none pour la conduite, ce qui bloquait aussi le
+   defilement des panneaux. Chaque panneau reprend donc la main sur ses gestes. */
+.tc-menu,
+.tc-credits {
+  pointer-events: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.tc-menu {
+  max-height: calc(100dvh - 88px);
+  overflow-y: auto;
+}
+
+/* En paysage sur telephone l'ecran est bas : le menu passe en deux colonnes
+   pour tenir entierement, sans avoir a le faire defiler. */
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 560px) {
+  .tc-menu {
+    width: min(340px, 52vw);
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+  }
+  .tc-menu.visible { display: grid; }
+  .tc-menu button {
+    font-size: 12px;
+    padding: 10px 9px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .tc-menu-close { grid-column: 1 / -1; }
+}
