@@ -60,7 +60,14 @@ export class TouchControls {
         <button data-act="diag">Diagnostic</button>
         <button data-act="place">Changer de lieu</button>
         <button data-act="credits">Sources et credits</button>
+        <button data-act="report">Rapport technique</button>
         <button data-act="close" class="tc-menu-close">Fermer</button>
+      </div>
+
+      <div class="tc-credits tc-report" data-report>
+        <h3>Rapport technique</h3>
+        <pre data-report-text></pre>
+        <button data-act="report-close">Fermer</button>
       </div>
 
       <div class="tc-credits" data-credits>
@@ -87,6 +94,8 @@ export class TouchControls {
     this.gyroPromptEl = root.querySelector('[data-gyro-prompt]');
     this.steerZone = root.querySelector('[data-steer-zone]');
     this.creditsEl = root.querySelector('[data-credits]');
+    this.reportEl = root.querySelector('[data-report]');
+    this.reportTextEl = root.querySelector('[data-report-text]');
 
     this._bindPedals();
     this._bindSteering();
@@ -182,6 +191,16 @@ export class TouchControls {
       if (act === 'gyro-off') {
         this.gyroPromptEl.classList.remove('visible');
         this.actions.hint?.('Glisse le doigt a gauche de l\'ecran pour diriger');
+        return;
+      }
+      if (act === 'report') {
+        this.menuEl.classList.remove('visible');
+        this.reportTextEl.textContent = this.actions.report?.() || 'indisponible';
+        this.reportEl.classList.add('visible');
+        return;
+      }
+      if (act === 'report-close') {
+        this.reportEl.classList.remove('visible');
         return;
       }
       if (act === 'credits') {

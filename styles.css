@@ -700,3 +700,18 @@ button.primary:disabled {
 }
 .diag-row.wide { display: block; }
 .diag-row.wide b { display: block; font-weight: 400; font-size: 10px; word-break: break-word; }
+
+/* Rapport technique : pense pour etre lu et photographie sur un telephone. */
+.tc-report { width: min(560px, 94vw); }
+.tc-report pre {
+  margin: 0;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Le panneau de coin ne doit jamais passer sous les pedales. */
+#hud.compact .hud-topright { max-width: 46vw; }

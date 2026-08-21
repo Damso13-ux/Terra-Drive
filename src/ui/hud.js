@@ -122,22 +122,17 @@ export class Hud {
     const row = (label, value, bad) =>
       `<div class="diag-row"><span>${label}</span><b class="${bad ? 'warn' : ''}">${value}</b></div>`;
 
+    // Volontairement court : ce panneau vit dans un coin d'ecran de telephone.
+    // Le detail complet est dans le rapport technique, accessible par le menu.
+    const sous = dVoiture < -0.5 || dCamera < 0.5;
     this.diagEl.innerHTML =
       row('images', frames, frames < 5) +
       row('fps', Math.round(this.fps)) +
       row('altitude', qualityLabel, quality < 2) +
-      row('sol', solVoiture.toFixed(0) + ' m') +
-      row('voiture / sol', (dVoiture >= 0 ? '+' : '') + dVoiture.toFixed(2) + ' m', dVoiture < -0.5) +
-      row('camera / sol', (dCamera >= 0 ? '+' : '') + dCamera.toFixed(1) + ' m', dCamera < 0.5) +
-      row('roues au sol', vehicle.wheels.filter((w) => w.grounded).length + '/4',
-          vehicle.wheels.filter((w) => w.grounded).length === 0) +
       row('chunks', terrain.stats.chunks, terrain.stats.chunks === 0) +
-      row('textures', terrain.stats.textured + ' ok / ' + terrain.stats.textureFailed + ' ko',
-          terrain.stats.textureFailed > 0) +
       row('routes', roads.stats.ways, roads.stats.ways === 0) +
-      row('en attente', pending) +
-      row('echecs reseau', failed, failed > 0) +
-      `<div class="diag-row wide"><span>gpu</span><b>${this.gpu}</b></div>`;
+      row('reseau', pending + ' / ' + failed + ' ko', failed > 0) +
+      (sous ? row('position', 'SOUS LE SOL', true) : '');
   }
 
   _drawMinimap(vehicle, roads) {

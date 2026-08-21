@@ -55,6 +55,56 @@ class Boot {
   }
 }
 
+const NEWLINE = String.fromCharCode(10);
+
+/** Couleur moyenne d'une image, pour savoir si une texture est bien coloree. */
+function averageColour(image) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 32;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(image, 0, 0, 32, 32);
+    const d = ctx.getImageData(0, 0, 32, 32).data;
+    let r = 0, g = 0, b = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; }
+    const n = d.length / 4;
+    return `rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`;
+  } catch {
+    return 'illisible';
+  }
+}
+
+/** Couleur moyenne de quelques zones de l'image rendue. */
+function samplePixels(canvas) {
+  try {
+    const W = 120, H = 60;
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(canvas, 0, 0, W, H);
+    const d = ctx.getImageData(0, 0, W, H).data;
+    const box = (x0, y0, x1, y1, label) => {
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let y = Math.floor(y0 * H); y < y1 * H; y++) {
+        for (let x = Math.floor(x0 * W); x < x1 * W; x++) {
+          const i = (y * W + x) * 4;
+          r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+        }
+      }
+      return `${label} rgb(${Math.round(r / n)},${Math.round(g / n)},${Math.round(b / n)})`;
+    };
+    return [
+      box(0.05, 0.05, 0.95, 0.2, 'ciel   '),
+      box(0.05, 0.55, 0.35, 0.75, 'sol G  '),
+      box(0.65, 0.55, 0.95, 0.75, 'sol D  '),
+      box(0.4, 0.8, 0.6, 0.95, 'sol bas'),
+    ];
+  } catch (e) {
+    return ['lecture impossible : ' + e.message];
+  }
+}
+
 /** Attend une promesse, mais jamais plus de `ms`. Ne rejette jamais. */
 function atMost(promise, ms) {
   return Promise.race([
@@ -320,6 +370,73 @@ class Game {
     this.hud.toast('Remis sur la route');
   }
 
+  /**
+   * Rapport technique lisible, destine a etre lu (ou photographie) sur l'appareil.
+   * Il repond a la seule question qui compte quand l'image est noire : est-ce que
+   * la geometrie manque, est-ce que les textures manquent, ou est-ce que la
+   * lumiere n'arrive pas ?
+   */
+  buildReport() {
+    const L = [];
+    const q = this.quality;
+    const v = this.vehicle;
+    const gl = this.renderer.getContext();
+
+    L.push('— APPAREIL —');
+    L.push('mobile ' + this.device.mobile + ', coeurs ' + this.device.cores);
+    L.push('pixelRatio ' + this.device.pixelRatio + ' (ecran ' + devicePixelRatio + ')');
+    L.push('ecran ' + innerWidth + 'x' + innerHeight);
+    try {
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      L.push('gpu ' + String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 58));
+    } catch { L.push('gpu inconnu'); }
+    L.push('webgl2 ' + (typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext));
+    L.push('texture max ' + gl.getParameter(gl.MAX_TEXTURE_SIZE));
+
+    L.push('');
+    L.push('— MONDE —');
+    L.push('chunks ' + this.terrain.stats.chunks + ', maillage anneau0 ' + this.terrain._lodFor(0));
+    L.push('textures ' + this.terrain.stats.textured + ' ok / ' + this.terrain.stats.textureFailed + ' ko');
+    L.push('routes ' + this.roads.stats.ways + ', rubans ' + this.roadMesh.stats.tris + ' tri');
+    L.push('altitude ' + ['ABSENTE', 'approchee', 'fine'][this.heightfield.lastQuality]);
+    L.push('sol ' + this.ground.height(v.position.x, v.position.z).toFixed(0) + ' m');
+    L.push('voiture/sol ' + (v.position.y - this.ground.height(v.position.x, v.position.z)).toFixed(2) + ' m');
+    L.push('camera/sol ' + (this.camera.position.y - this.ground.height(this.camera.position.x, this.camera.position.z)).toFixed(1) + ' m');
+    L.push('roues au sol ' + v.wheels.filter((w) => w.grounded).length + '/4');
+    L.push('objets scene ' + this.scene.children.length);
+
+    L.push('');
+    L.push('— LUMIERE —');
+    L.push('exposition ' + this.renderer.toneMappingExposure);
+    L.push('soleil ' + this.atmosphere.sun.intensity.toFixed(2) + ' pos y ' + this.atmosphere.sun.position.y.toFixed(0));
+    L.push('hemispherique ' + this.atmosphere.hemi.intensity.toFixed(2));
+    L.push('environnement ' + (this.scene.environment ? 'present x' + this.scene.environmentIntensity : 'ABSENT'));
+    L.push('ombres ' + this.renderer.shadowMap.enabled);
+    L.push('brume ' + Math.round(this.scene.fog.near) + '-' + Math.round(this.scene.fog.far) + ' #' + this.scene.fog.color.getHexString());
+
+    // Materiau et texture d'un chunk : la texture est-elle vraiment coloree ?
+    const chunk = [...this.terrain.chunks.values()].find((c) => c.mesh);
+    if (chunk) {
+      L.push('');
+      L.push('— UN CHUNK —');
+      const m = chunk.mesh.material;
+      L.push('materiau ' + m.type + (m === this.terrain.pendingMaterial ? ' (SANS TEXTURE)' : ''));
+      L.push('carte ' + (m.map ? 'oui' : 'NON') + ', visible ' + chunk.mesh.visible);
+      L.push('triangles ' + (chunk.mesh.geometry.index.count / 3));
+      if (m.map && m.map.image) {
+        L.push('texture moyenne ' + averageColour(m.map.image));
+      }
+    }
+
+    L.push('');
+    L.push('— PIXELS RENDUS —');
+    this.renderer.render(this.scene, this.camera);
+    const pix = samplePixels(this.renderer.domElement);
+    for (const line of pix) L.push(line);
+
+    return L.join(NEWLINE);
+  }
+
   /** Actions du jeu, partagees par le clavier et les commandes tactiles. */
   buildActions() {
     return {
@@ -352,6 +469,7 @@ class Game {
         location.reload();
       },
       hint: (message) => this.hud.toast(message),
+      report: () => this.buildReport(),
     };
   }
 
