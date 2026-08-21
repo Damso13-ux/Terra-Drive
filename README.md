@@ -30,9 +30,19 @@ puis ouvrir `http://ADRESSE-IP-DU-PC:8123` sur le téléphone.
 
 ### En ligne
 
+<https://damso13-ux.github.io/Terra-Drive/>
+
 Le dépôt se publie tout seul sur GitHub Pages à chaque push sur `main`
 (`.github/workflows/pages.yml`). Pour l'activer la première fois :
 **Settings → Pages → Source → GitHub Actions**.
+
+> **Après un déploiement, compte jusqu'à 10 minutes avant de voir tes changements.**
+> GitHub Pages sert les fichiers avec `Cache-Control: max-age=600`, et comme les
+> modules ES sont chargés individuellement, le navigateur garde l'ancienne version
+> tout ce temps. Un rechargement forcé (Ctrl+Maj+R, ou onglet privé sur téléphone)
+> court-circuite l'attente. Ce n'est pas un bug : c'est le comportement normal de
+> Pages, et il n'y a pas d'étape de build ici pour glisser un hash dans les noms
+> de fichiers.
 
 ## Commandes
 
@@ -180,6 +190,10 @@ véhicule, adhérence 0,99 sur route primaire).
 - La voiture flue très lentement à l'arrêt en pente (< 1 km/h) : la résistance au
   roulement s'annule sous 0,5 m/s. Cosmétique, mais à corriger.
 - Pas de collision avec autre chose que le sol : ni bâtiments, ni glissières.
+- **Le gyroscope n'a jamais été testé sur un vrai téléphone** : la logique de choix
+  d'axe selon l'orientation de l'écran est écrite d'après la spécification, pas
+  vérifiée sur l'appareil. Si la direction part à l'envers ou sur le mauvais axe,
+  c'est le bloc `_onOrientation` dans `src/ui/touch.js` qu'il faut reprendre.
 
 ## Pistes suivantes
 
