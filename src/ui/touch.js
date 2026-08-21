@@ -59,7 +59,19 @@ export class TouchControls {
         <button data-act="recenter">Recentrer l'inclinaison</button>
         <button data-act="diag">Diagnostic</button>
         <button data-act="place">Changer de lieu</button>
+        <button data-act="credits">Sources et credits</button>
         <button data-act="close" class="tc-menu-close">Fermer</button>
+      </div>
+
+      <div class="tc-credits" data-credits>
+        <h3>Sources des donnees</h3>
+        <p>Relief&nbsp;: Copernicus DEM (COP-DEM-GLO-30), IGN RGE ALTI&reg;, CNIG
+           &mdash; &copy; EU/ESA/IGN/CNIG.</p>
+        <p>Routes et recherche de lieux&nbsp;: &copy; les contributeurs
+           <b>OpenStreetMap</b>, sous licence ODbL.</p>
+        <p>Imagerie aerienne&nbsp;: &copy; Esri World Imagery.</p>
+        <p>Rendu&nbsp;: three.js. Carte du selecteur&nbsp;: Leaflet.</p>
+        <button data-act="credits-close">Fermer</button>
       </div>
 
       <div class="tc-gyro-prompt" data-gyro-prompt>
@@ -74,6 +86,7 @@ export class TouchControls {
     this.menuEl = root.querySelector('[data-menu]');
     this.gyroPromptEl = root.querySelector('[data-gyro-prompt]');
     this.steerZone = root.querySelector('[data-steer-zone]');
+    this.creditsEl = root.querySelector('[data-credits]');
 
     this._bindPedals();
     this._bindSteering();
@@ -169,6 +182,15 @@ export class TouchControls {
       if (act === 'gyro-off') {
         this.gyroPromptEl.classList.remove('visible');
         this.actions.hint?.('Glisse le doigt a gauche de l\'ecran pour diriger');
+        return;
+      }
+      if (act === 'credits') {
+        this.menuEl.classList.remove('visible');
+        this.creditsEl.classList.add('visible');
+        return;
+      }
+      if (act === 'credits-close') {
+        this.creditsEl.classList.remove('visible');
         return;
       }
       if (act === 'recenter') {

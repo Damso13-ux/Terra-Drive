@@ -557,7 +557,7 @@ button.primary:disabled {
 
 #hud.compact .minimap { width: 108px; height: 108px; }
 #hud.compact .hud-topright { top: 12px; right: 12px; gap: 7px; }
-#hud.compact .hud-bottom { left: calc(14px + env(safe-area-inset-left)); bottom: 14px; }
+#hud.compact .hud-bottom { left: calc(14px + env(safe-area-inset-left)); bottom: calc(16px + env(safe-area-inset-bottom)); }
 #hud.compact .speed { font-size: 40px; }
 #hud.compact .rpm { width: 168px; }
 #hud.compact .place { max-width: 42vw; font-size: 11px; }
@@ -592,4 +592,43 @@ button.primary:disabled {
   .tc-gas { width: 88px; height: 88px; }
   .tc-brake { width: 72px; height: 72px; }
   .tc-hand { right: calc(126px + env(safe-area-inset-right)); bottom: calc(112px + env(safe-area-inset-bottom)); width: 50px; height: 50px; }
+}
+
+/* --- credits ----------------------------------------------------------- */
+/* Sur petit ecran le bandeau d'attribution passait sous les pedales, donc
+   illisible. Les recommandations d'attribution d'OpenStreetMap admettent de la
+   placer derriere une commande sur les interfaces contraintes : elle vit
+   desormais dans le menu, ou elle est reellement lisible. */
+.tc-credits {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: none;
+  flex-direction: column;
+  gap: 9px;
+  width: min(420px, 88vw);
+  max-height: 84vh;
+  overflow-y: auto;
+  padding: 20px 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+.tc-credits.visible { display: flex; }
+.tc-credits h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+.tc-credits p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.tc-credits b { color: var(--text); font-weight: 600; }
+.tc-credits button { margin-top: 6px; }
+
+@media (pointer: coarse) {
+  /* remplace par l'entree "Sources et credits" du menu */
+  #attrib { display: none; }
 }
