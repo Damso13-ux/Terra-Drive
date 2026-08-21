@@ -2,7 +2,11 @@
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0d11">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="Conduire n'importe quelle route du monde reel, dans le navigateur.">
 <title>Terra Drive — conduire le monde reel</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="styles.css">
@@ -21,6 +25,7 @@
 <canvas id="view"></canvas>
 
 <div id="hud"></div>
+<div id="touch"></div>
 
 <div id="boot" class="overlay">
   <div class="boot-card">
@@ -28,12 +33,28 @@
     <div class="boot-steps" data-steps></div>
     <p class="boot-note">
       Le relief vient de Copernicus / IGN, les routes d'OpenStreetMap, l'imagerie d'Esri.
-      Rien n'est precalcule : tout est construit a la volee autour de toi.
+      Rien n'est precalcule&nbsp;: tout est construit a la volee autour de toi.
     </p>
   </div>
 </div>
 
 <div id="picker" class="overlay"></div>
+
+<div id="lost" class="overlay">
+  <div class="boot-card">
+    <h2>Rendu interrompu</h2>
+    <p class="boot-note">
+      Le navigateur a repris la main sur la carte graphique, ce qui arrive quand on
+      quitte l'onglet un moment. Ta position est memorisee.
+    </p>
+    <button class="primary" onclick="location.reload()">Reprendre</button>
+  </div>
+</div>
+
+<div id="rotate">
+  <div class="rotate-icon">&#128241;</div>
+  <p>Tourne ton telephone en mode paysage</p>
+</div>
 
 <div id="help">
   <b>Z Q S D</b> ou <b>flechettes</b> conduire &nbsp;·&nbsp;

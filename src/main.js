@@ -15,8 +15,10 @@ import { ChaseCamera } from './core/camera.js';
 import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
 import { Picker } from './ui/picker.js';
+import { TouchControls } from './ui/touch.js';
+import { detectDevice, qualityProfile } from './core/device.js';
 
-const ROAD_RADIUS = 2600; // rayon de chargement du reseau routier, en metres
+const ROAD_RADIUS = 2600; // rayon de chargement du reseau routier, en metres (bureau)
 const SPAWN_SEARCH = 350; // distance max pour trouver une route au point de depart
 
 class Boot {
@@ -67,16 +69,21 @@ function atMost(promise, ms) {
 class Game {
   constructor(canvas) {
     this.canvas = canvas;
+    this.device = detectDevice();
+    this.quality = qualityProfile(this.device);
+    const q = this.quality;
+
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: q.antialias,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.setPixelRatio(this.device.pixelRatio);
+    this.renderer.shadowMap.enabled = q.shadows;
+    this.renderer.shadowMap.type = q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 0.78;
+    this.renderer.toneMappingExposure = 0.42;
+    this._bindContextLoss();
 
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.35, 12000);
@@ -102,7 +109,7 @@ class Game {
     this.proj = new Projection(lon, lat);
     // Tuiles et Overpass ont des contraintes opposees : les tuiles aiment le
     // parallelisme, Overpass limite par adresse IP et se ferme si on le bouscule.
-    this.queue = new RequestQueue({ concurrency: 10, retries: 3 });
+    this.queue = new RequestQueue({ concurrency: this.quality.concurrency, retries: 3 });
     this.roadQueue = new RequestQueue({ concurrency: 2, retries: 4, baseDelay: 1400 });
 
     this.heightfield = new Heightfield(this.proj, this.queue);
@@ -133,31 +140,41 @@ class Game {
 
     // ---- 4. scene ---------------------------------------------------------
     boot.step('scene', 'Construction du monde');
-    this.atmosphere = new Atmosphere(this.scene, this.renderer, { hour: 10 });
+    const q = this.quality;
+    this.atmosphere = new Atmosphere(this.scene, this.renderer, {
+      hour: 10,
+      fogDistance: q.fogDistance,
+      shadows: q.shadows,
+      shadowMapSize: q.shadowMapSize,
+    });
     this.terrain = new Terrain({
       scene: this.scene,
       proj: this.proj,
       heightfield: this.heightfield,
       ground: this.ground,
       queue: this.queue,
-      radius: 3,
+      radius: q.terrainRadius,
+      lod: q.lod,
+      detailedImageryRings: q.detailedImageryRings,
+      rebuildBudget: q.rebuildBudget,
     });
-    this.roadMesh = new RoadMesh({ scene: this.scene, roads: this.roads, radius: 2 });
+    this.roadMesh = new RoadMesh({ scene: this.scene, roads: this.roads, radius: q.roadRadius });
     this.heightfield.onTile = (tx2, ty2) => this.terrain.markTileDirty(tx2, ty2);
 
-    this.vehicle = new Vehicle(this.ground);
-    this.carView = new CarView(this.scene, this.vehicle);
+    this.vehicle = new Vehicle(this.ground, { substep: q.substep });
+    this.carView = new CarView(this.scene, this.vehicle, { skidPoints: q.skidPoints });
     this.chase = new ChaseCamera(this.camera, this.ground);
     this.input = new Input();
 
-    this.hud = new Hud(document.getElementById('hud'));
+    this.hud = new Hud(document.getElementById('hud'), { compact: this.device.mobile });
+    if (this.device.mobile) this.setupTouch();
     this.spawn();
 
     // pre-construction : on remplit les chunks proches avant d'afficher quoi que ce soit
     this.terrain._rebuildBudget = 64;
     this.terrain.update(this.vehicle.position.x, this.vehicle.position.z);
     this.roadMesh.update(this.vehicle.position.x, this.vehicle.position.z);
-    this.terrain._rebuildBudget = 2;
+    this.terrain._rebuildBudget = q.rebuildBudget;
     boot.done('scene', this.terrain.stats.chunks + ' chunks');
 
     this.bindKeys();
@@ -195,8 +212,61 @@ class Game {
     });
   }
 
+  get storageKey() {
+    return 'terra:pos:' + location.hash;
+  }
+
+  /** Les navigateurs mobiles rechargent les onglets sans prevenir : on garde la place. */
+  remember() {
+    try {
+      const p = this.vehicle.position;
+      const q = this.vehicle.quaternion;
+      const heading = Math.atan2(
+        2 * (q.w * q.y + q.x * q.z),
+        1 - 2 * (q.y * q.y + q.x * q.x)
+      );
+      sessionStorage.setItem(
+        this.storageKey,
+        JSON.stringify({ x: p.x, z: p.z, heading, odo: this.vehicle.odometer })
+      );
+    } catch {
+      /* mode navigation privee : tant pis, ce n'est qu'un confort */
+    }
+  }
+
+  forget() {
+    try {
+      sessionStorage.removeItem(this.storageKey);
+    } catch {}
+  }
+
+  recall() {
+    try {
+      const raw = sessionStorage.getItem(this.storageKey);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      return Number.isFinite(p.x) && Number.isFinite(p.z) ? p : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Place la voiture sur la route la plus proche, ou a defaut sur le terrain. */
   spawn() {
+    const saved = this.recall();
+    if (saved) {
+      const near = this.roads.nearestRoad(saved.x, saved.z, 120);
+      if (near) {
+        this.vehicle.placeAt(near.x, near.y, near.z, saved.heading);
+      } else {
+        this.vehicle.placeAt(saved.x, this.ground.height(saved.x, saved.z), saved.z, saved.heading);
+      }
+      this.vehicle.odometer = saved.odo || 0;
+      this.spawnPoint = { x: saved.x, y: this.vehicle.position.y, z: saved.z, heading: saved.heading };
+      this.spawnedOnRoad = true;
+      this.rescueTimer = 0;
+      return;
+    }
     const near = this.roads.nearestRoad(0, 0, SPAWN_SEARCH);
     if (near) {
       this.vehicle.placeAt(near.x, near.y, near.z, near.heading);
@@ -250,35 +320,73 @@ class Game {
     this.hud.toast('Remis sur la route');
   }
 
+  /** Actions du jeu, partagees par le clavier et les commandes tactiles. */
+  buildActions() {
+    return {
+      respawn: () => this.respawn(),
+      camera: () => this.hud.toast('Camera : ' + this.chase.cycleMode()),
+      lights: () => {
+        this.carView.setLights(!this.carView.lightsOn);
+        this.hud.toast('Phares ' + (this.carView.lightsOn ? 'allumes' : 'eteints'));
+      },
+      time: () => {
+        const next = (Math.round(this.atmosphere.hour) + 3) % 24;
+        this.atmosphere.setHour(next);
+        this.carView.setLights(this.atmosphere.isNight);
+        this.hud.toast('Heure : ' + String(next).padStart(2, '0') + ' h');
+      },
+      assists: () => {
+        const a = this.vehicle.assists;
+        const on = !(a.abs && a.tcs);
+        a.abs = a.tcs = on;
+        this.hud.toast('Aides ' + (on ? 'activees' : 'desactivees'));
+      },
+      diag: () => this.hud.toggleDiag(),
+      pause: () => {
+        this.paused = !this.paused;
+        this.hud.toast(this.paused ? 'Pause' : 'Reprise');
+      },
+      place: () => {
+        this.forget();
+        location.hash = '';
+        location.reload();
+      },
+      hint: (message) => this.hud.toast(message),
+    };
+  }
+
+  setupTouch() {
+    this.actions = this.actions || this.buildActions();
+    this.touch = new TouchControls(document.getElementById('touch'), this.actions);
+    this.input.setTouch(this.touch);
+    this.touch.show();
+  }
+
+  /**
+   * Un navigateur mobile n'hesite pas a reprendre le contexte WebGL quand on change
+   * d'application. Le reconstruire a la main serait fragile ; comme le lieu est dans
+   * l'URL et la position en sessionStorage, un rechargement remet tout d'aplomb.
+   */
+  _bindContextLoss() {
+    this.canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.running = false;
+      document.getElementById('lost')?.classList.add('visible');
+    });
+    this.canvas.addEventListener('webglcontextrestored', () => location.reload());
+  }
+
   bindKeys() {
     const i = this.input;
-    i.on('KeyR', () => this.respawn());
-    i.on('KeyC', () => this.hud.toast('Camera : ' + this.chase.cycleMode()));
-    i.on('KeyL', () => {
-      this.carView.setLights(!this.carView.lightsOn);
-      this.hud.toast('Phares ' + (this.carView.lightsOn ? 'allumes' : 'eteints'));
-    });
-    i.on('KeyT', () => {
-      const next = (Math.round(this.atmosphere.hour) + 3) % 24;
-      this.atmosphere.setHour(next);
-      this.carView.setLights(this.atmosphere.isNight);
-      this.hud.toast('Heure : ' + String(next).padStart(2, '0') + ' h');
-    });
-    i.on('KeyH', () => {
-      location.hash = '';
-      location.reload();
-    });
-    i.on('F3', () => this.hud.toggleDiag());
-    i.on('KeyP', () => {
-      this.paused = !this.paused;
-      this.hud.toast(this.paused ? 'Pause' : 'Reprise');
-    });
-    i.on('KeyG', () => {
-      const a = this.vehicle.assists;
-      const on = !(a.abs && a.tcs);
-      a.abs = a.tcs = on;
-      this.hud.toast('Aides ' + (on ? 'activees' : 'desactivees'));
-    });
+    const a = (this.actions = this.actions || this.buildActions());
+    i.on('KeyR', a.respawn);
+    i.on('KeyC', a.camera);
+    i.on('KeyL', a.lights);
+    i.on('KeyT', a.time);
+    i.on('KeyH', a.place);
+    i.on('F3', a.diag);
+    i.on('KeyP', a.pause);
+    i.on('KeyG', a.assists);
 
     // souris pour la camera orbitale
     let dragging = false;
@@ -316,10 +424,16 @@ class Game {
 
     this.rescueSpawn(dt);
 
+    this._saveTimer = (this._saveTimer || 0) + dt;
+    if (this._saveTimer > 2) {
+      this._saveTimer = 0;
+      this.remember();
+    }
+
     const p = this.vehicle.position;
     this.heightfield.tick(dt);
     this.terrain.update(p.x, p.z);
-    this.roads.ensureArea(p.x, p.z, ROAD_RADIUS);
+    this.roads.ensureArea(p.x, p.z, this.device.mobile ? 1500 : ROAD_RADIUS);
     this.roadMesh.update(p.x, p.z);
     this.atmosphere.update(p, dt);
     this.chase.update(this.vehicle, dt);

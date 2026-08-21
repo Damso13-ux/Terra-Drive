@@ -12,6 +12,7 @@ export class Input {
     this.actions = new Map(); // code -> callback (appuis simples)
     this.state = { throttle: 0, brake: 0, steer: 0, handbrake: 0 };
     this.gamepadIndex = null;
+    this.touch = null;
     this.enabled = true;
 
     this._onDown = (e) => {
@@ -38,6 +39,11 @@ export class Input {
     this.actions.set(code, callback);
   }
 
+  /** Sur mobile, le tactile devient la source principale. */
+  setTouch(touchControls) {
+    this.touch = touchControls;
+  }
+
   any(codes) {
     for (const c of codes) if (this.keys.has(c)) return true;
     return false;
@@ -61,6 +67,7 @@ export class Input {
     s.steer = approach(s.steer, steerTarget, dt * (steerTarget === 0 ? 6 : 3.6));
     s.handbrake = this.keys.has('Space') ? 1 : 0;
 
+    if (this.touch) this.touch.apply(s, dt);
     this._applyGamepad(s);
     return s;
   }

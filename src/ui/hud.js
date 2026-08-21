@@ -17,8 +17,10 @@ const ROAD_STYLE = {
 };
 
 export class Hud {
-  constructor(root) {
+  constructor(root, { compact = false } = {}) {
     this.root = root;
+    this.compact = compact;
+    if (compact) root.classList.add('compact');
     root.innerHTML = `
       <div class="hud-topright">
         <canvas class="minimap" width="200" height="200"></canvas>
@@ -49,7 +51,9 @@ export class Hud {
     this.fps = 60;
     this._acc = 0;
     this._toastTimer = 0;
-    this.showDiag = true;
+    // sur petit ecran, le diagnostic mange trop de place : il reste accessible au menu
+    this.showDiag = !compact;
+    if (compact) this.diagEl.style.display = 'none';
   }
 
   toast(message, seconds = 2.6) {

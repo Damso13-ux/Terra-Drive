@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 
 export class CarView {
-  constructor(scene, vehicle, { color = 0xd23c2e } = {}) {
+  constructor(scene, vehicle, { color = 0xd23c2e, skidPoints = 2400 } = {}) {
     this.vehicle = vehicle;
     const c = vehicle.cfg;
 
@@ -113,7 +113,7 @@ export class CarView {
     this.group.add(this.headlights);
     this.lightsOn = false;
 
-    this.skid = new SkidMarks(scene, vehicle);
+    this.skid = new SkidMarks(scene, vehicle, skidPoints);
   }
 
   setLights(on) {
@@ -144,9 +144,9 @@ export class CarView {
 
 /** Traces de gomme : un ruban par roue, recycle en anneau. */
 class SkidMarks {
-  constructor(scene, vehicle) {
+  constructor(scene, vehicle, max = 2400) {
     this.vehicle = vehicle;
-    this.max = 2400;
+    this.max = max;
     const geo = new THREE.BufferGeometry();
     this.positions = new Float32Array(this.max * 3);
     this.opacities = new Float32Array(this.max);

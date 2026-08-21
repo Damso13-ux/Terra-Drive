@@ -56,34 +56,61 @@ export class Ground {
   }
 
   /**
-   * Intersection d'un rayon avec la surface (bissection : la surface est un
-   * champ de hauteur, donc h(t) - y(t) change de signe une seule fois en pratique).
-   * @returns t dans [0, maxT] ou -1
+   * Intersection d'un rayon avec la surface.
+   *
+   * C'est le point chaud absolu du moteur : quatre roues, 180 a 240 pas par seconde.
+   * Les rayons de suspension sont quasi verticaux, donc on n'utilise pas une
+   * bissection aveugle mais un point fixe qui converge en 3 iterations :
+   * on suppose le sol plat, on regarde ou on tombe, on recommence. La bissection
+   * ne sert que de filet quand la pente est trop forte pour converger.
+   *
+   * @returns t dans [0, maxT], ou -1 si le rayon ne touche rien
    */
   raycast(ox, oy, oz, dx, dy, dz, maxT) {
+    if (dy > -0.35) return this._raycastBisection(ox, oy, oz, dx, dy, dz, maxT);
+
+    const invDown = -1 / dy;
+    let t = (oy - this.height(ox, oz)) * invDown;
+    if (t <= 0) return 0; // deja sous la surface
+
+    for (let i = 0; i < 3; i++) {
+      if (t > maxT * 1.6) return -1; // franchement au-dessus du sol, inutile d'affiner
+      const h = this.height(ox + dx * t, oz + dz * t);
+      const next = (oy - h) * invDown;
+      const delta = next - t;
+      t = next;
+      if (delta > -0.004 && delta < 0.004) break;
+    }
+
+    if (t < 0) t = 0;
+    if (t > maxT) return -1;
+
+    // Verification : sur une pente raide le point fixe peut osciller. Dans ce cas,
+    // on repasse par la methode lente mais infaillible.
+    const err = oy + dy * t - this.height(ox + dx * t, oz + dz * t);
+    if (err > 0.05 || err < -0.05) {
+      return this._raycastBisection(ox, oy, oz, dx, dy, dz, maxT);
+    }
+    return t;
+  }
+
+  _raycastBisection(ox, oy, oz, dx, dy, dz, maxT) {
     const f = (t) => oy + dy * t - this.height(ox + dx * t, oz + dz * t);
-    let f0 = f(0);
-    if (f0 <= 0) return 0; // deja sous la surface
+    if (f(0) <= 0) return 0;
     const COARSE = 8;
     let prevT = 0;
-    let prevF = f0;
     for (let i = 1; i <= COARSE; i++) {
       const t = (maxT * i) / COARSE;
-      const ft = f(t);
-      if (ft <= 0) {
-        let lo = prevT, hi = t, flo = prevF;
+      if (f(t) <= 0) {
+        let lo = prevT, hi = t;
         for (let k = 0; k < 12; k++) {
           const mid = (lo + hi) * 0.5;
-          const fm = f(mid);
-          if (fm > 0) {
-            lo = mid;
-            flo = fm;
-          } else hi = mid;
+          if (f(mid) > 0) lo = mid;
+          else hi = mid;
         }
         return hi;
       }
       prevT = t;
-      prevF = ft;
     }
     return -1;
   }

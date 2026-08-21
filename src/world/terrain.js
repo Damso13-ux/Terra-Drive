@@ -13,18 +13,26 @@ import { loadImage } from '../core/net.js';
 
 const IMAGERY = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile';
 
-// resolution du maillage selon l'anneau de distance
-const LOD = [64, 48, 32, 16, 12];
+// resolution du maillage par defaut, selon l'anneau de distance
+const DEFAULT_LOD = [64, 48, 32, 16, 12];
 const SKIRT = 18; // profondeur de la jupe de bord, en metres
 
 export class Terrain {
-  constructor({ scene, proj, heightfield, ground, queue, radius = 3 }) {
+  constructor({
+    scene, proj, heightfield, ground, queue,
+    radius = 3,
+    lod = DEFAULT_LOD,
+    detailedImageryRings = 1,
+    rebuildBudget = 2,
+  }) {
     this.scene = scene;
     this.proj = proj;
     this.hf = heightfield;
     this.ground = ground;
     this.queue = queue;
     this.radius = radius;
+    this.lod = lod;
+    this.detailedImageryRings = detailedImageryRings;
     this.zoom = heightfield.fineZoom;
     this.chunks = new Map();
     this.group = new THREE.Group();
@@ -38,12 +46,16 @@ export class Terrain {
       side: THREE.DoubleSide,
     });
 
-    this._rebuildBudget = 2; // chunks reconstruits par frame, au maximum
+    this._rebuildBudget = rebuildBudget; // chunks reconstruits par frame, au maximum
     this.stats = { chunks: 0, textured: 0, rebuilding: 0 };
   }
 
   key(tx, ty) {
     return tx + '/' + ty;
+  }
+
+  _lodFor(ring) {
+    return this.lod[Math.min(ring, this.lod.length - 1)];
   }
 
   chunkBounds(tx, ty) {
@@ -76,7 +88,7 @@ export class Terrain {
           this.chunks.set(key, chunk);
         } else if (chunk.ring !== ring) {
           chunk.ring = ring;
-          if (LOD[Math.min(ring, LOD.length - 1)] !== chunk.res) chunk.dirty = true;
+          if (this._lodFor(ring) !== chunk.res) chunk.dirty = true;
           this._ensureTexture(chunk);
         }
         chunk.priority = ring;
@@ -117,7 +129,7 @@ export class Terrain {
   }
 
   _ensureTexture(chunk) {
-    const level = chunk.ring <= 1 ? this.zoom + 1 : this.zoom;
+    const level = chunk.ring <= this.detailedImageryRings ? this.zoom + 1 : this.zoom;
     if (chunk.textureLevel >= level || chunk.textureRequested === level) return;
     chunk.textureRequested = level;
     const job =
@@ -240,7 +252,7 @@ export class Terrain {
   _buildMesh(chunk) {
     chunk.dirty = false;
     chunk.elevVersion = this.hf.version;
-    const res = LOD[Math.min(chunk.ring, LOD.length - 1)];
+    const res = this._lodFor(chunk.ring);
     chunk.res = res;
 
     const { minX, maxX, minZ, maxZ } = chunk.bounds;

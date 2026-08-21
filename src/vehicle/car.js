@@ -51,6 +51,7 @@ export const DEFAULT_CONFIG = {
   minSteer: 0.115, // rad a grande vitesse
   steerSpeed: 3.4, // rad/s de mouvement du volant
 
+  substep: 1 / 240, // pas d'integration fixe ; 1/180 suffit sur mobile
   tyreGrip: 1.55, // coefficient de base, module par la surface
   dragArea: 0.72, // Cd * A
   downforce: 0.32,
@@ -135,6 +136,7 @@ export class Vehicle {
     this.shiftTimer = 0;
     this.automatic = true;
     this.assists = { abs: true, tcs: true };
+    this.substep = c.substep;
     this.airborneTime = 0;
     this.odometer = 0;
 
@@ -218,7 +220,7 @@ export class Vehicle {
 
   update(dt) {
     // pas fixe : la stabilite d'un modele de pneu depend fortement du pas de temps
-    const step = 1 / 240;
+    const step = this.substep;
     let remaining = Math.min(dt, 0.1);
     while (remaining > 0) {
       const h = Math.min(step, remaining);

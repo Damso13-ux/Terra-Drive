@@ -6,33 +6,42 @@ import { Sky } from 'three/addons/objects/Sky.js';
 const SHADOW_EXTENT = 90; // demi-largeur de la zone d'ombre portee, en metres
 
 export class Atmosphere {
-  constructor(scene, renderer, { hour = 10, fogDistance = 2800 } = {}) {
+  constructor(scene, renderer, {
+    hour = 10,
+    fogDistance = 2800,
+    shadows = true,
+    shadowMapSize = 2048,
+    shadowExtent = SHADOW_EXTENT,
+  } = {}) {
     this.scene = scene;
     this.renderer = renderer;
     this.fogDistance = fogDistance;
+    this.shadowsEnabled = shadows;
 
     this.sky = new Sky();
     this.sky.scale.setScalar(600000);
-    this.sky.material.uniforms.turbidity.value = 4.5;
-    this.sky.material.uniforms.rayleigh.value = 2.2;
+    this.sky.material.uniforms.turbidity.value = 8.0;
+    this.sky.material.uniforms.rayleigh.value = 1.4;
     this.sky.material.uniforms.mieCoefficient.value = 0.005;
     this.sky.material.uniforms.mieDirectionalG.value = 0.8;
     scene.add(this.sky);
 
     this.sun = new THREE.DirectionalLight(0xffffff, 3.0);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.castShadow = shadows;
+    this.sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
     this.sun.shadow.camera.near = 1;
     this.sun.shadow.camera.far = 600;
-    this.sun.shadow.camera.left = -SHADOW_EXTENT;
-    this.sun.shadow.camera.right = SHADOW_EXTENT;
-    this.sun.shadow.camera.top = SHADOW_EXTENT;
-    this.sun.shadow.camera.bottom = -SHADOW_EXTENT;
+    this.sun.shadow.camera.left = -shadowExtent;
+    this.sun.shadow.camera.right = shadowExtent;
+    this.sun.shadow.camera.top = shadowExtent;
+    this.sun.shadow.camera.bottom = -shadowExtent;
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.6;
     scene.add(this.sun, this.sun.target);
 
-    this.hemi = new THREE.HemisphereLight(0xa8c4e8, 0x6b6350, 0.6);
+    // Le ciel eclaire reellement le sol en bleu, mais dose trop fort cela delave
+    // toute la scene : la moitie "sol" est volontairement chaude pour compenser.
+    this.hemi = new THREE.HemisphereLight(0x93b2d8, 0x7a6c52, 0.6);
     scene.add(this.hemi);
 
     scene.fog = new THREE.Fog(0x9fb6cc, fogDistance * 0.28, fogDistance);
@@ -61,16 +70,16 @@ export class Atmosphere {
     this.sky.material.uniforms.sunPosition.value.copy(this._sunDir);
 
     const day = THREE.MathUtils.clamp((elevation + 4) / 20, 0, 1);
-    this.sun.intensity = 0.08 + 1.95 * day;
+    this.sun.intensity = 0.05 + 1.25 * day;
     this.sun.color.setHSL(0.09 + 0.03 * day, 0.55 - 0.4 * day, 0.55 + 0.45 * day);
-    this.hemi.intensity = 0.07 + 0.33 * day;
+    this.hemi.intensity = 0.03 + 0.10 * day;
 
-    const fog = new THREE.Color().setHSL(0.58, 0.20 + 0.12 * (1 - day), 0.06 + 0.46 * day);
+    const fog = new THREE.Color().setHSL(0.58, 0.26 + 0.10 * (1 - day), 0.05 + 0.34 * day);
     this.scene.fog.color.copy(fog);
     this.renderer.setClearColor(fog);
 
-    this.sky.material.uniforms.turbidity.value = 3.0 + 4 * (1 - day);
-    this.sky.material.uniforms.rayleigh.value = 1.2 + 2.2 * day;
+    this.sky.material.uniforms.turbidity.value = 6.0 + 5 * (1 - day);
+    this.sky.material.uniforms.rayleigh.value = 0.8 + 1.1 * day;
 
     this.isNight = elevation < 1;
     this._envDirty = true;
@@ -99,7 +108,7 @@ export class Atmosphere {
     const rt = this.pmrem.fromScene(this._envScene, 0.04);
     this.scene.add(this.sky);
     this.scene.environment = rt.texture;
-    this.scene.environmentIntensity = 0.42;
+    this.scene.environmentIntensity = 0.22;
   }
 
   dispose() {
