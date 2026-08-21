@@ -64,8 +64,11 @@ export class ChaseCamera {
     }
     this.yaw += shortestAngle(this.yaw, heading) * Math.min(1, dt * 6);
 
-    const dist = this.mode === 'orbit' ? this.orbitDist : 6.0 + Math.min(3.4, speed * 0.075);
-    const height = this.mode === 'orbit' ? this.orbitDist * Math.sin(this.orbitPitch) : 2.25;
+    // Camera plus haute et un peu plus reculee : au ras du sol, l'imagerie
+    // satellite est vue en rasant et se reduit a une trainee floue. En prenant de
+    // la hauteur on regarde le paysage plutot que le bitume.
+    const dist = this.mode === 'orbit' ? this.orbitDist : 6.8 + Math.min(4.0, speed * 0.09);
+    const height = this.mode === 'orbit' ? this.orbitDist * Math.sin(this.orbitPitch) : 3.05;
 
     this._desired.set(
       vehicle.position.x + Math.sin(this.yaw) * -dist,

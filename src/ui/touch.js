@@ -275,8 +275,11 @@ export class TouchControls {
 
   /** Ecrit les commandes tactiles dans l'etat partage avec le clavier. */
   apply(state, dt) {
-    state.throttle = approach(state.throttle, this.pedals.throttle ? 1 : 0, dt * (this.pedals.throttle ? 5 : 8));
-    state.brake = approach(state.brake, this.pedals.brake ? 1 : 0, dt * (this.pedals.brake ? 7 : 9));
+    // Au doigt, on attend une reponse immediate : la moindre rampe se ressent
+    // comme une commande molle. Il reste juste assez de lissage pour eviter un
+    // a-coup de couple d'un pas de temps a l'autre.
+    state.throttle = approach(state.throttle, this.pedals.throttle ? 1 : 0, dt * (this.pedals.throttle ? 16 : 20));
+    state.brake = approach(state.brake, this.pedals.brake ? 1 : 0, dt * (this.pedals.brake ? 22 : 24));
     state.handbrake = this.pedals.handbrake ? 1 : 0;
 
     let target;

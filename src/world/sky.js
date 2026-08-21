@@ -24,7 +24,7 @@ export class Atmosphere {
     this.sky.scale.setScalar(600000);
     this.sky.material.uniforms.turbidity.value = 8.0;
     this.sky.material.uniforms.rayleigh.value = 1.4;
-    this.sky.material.uniforms.mieCoefficient.value = 0.005;
+    this.sky.material.uniforms.mieCoefficient.value = 0.003;
     this.sky.material.uniforms.mieDirectionalG.value = 0.8;
     scene.add(this.sky);
 
@@ -51,7 +51,9 @@ export class Atmosphere {
     this.ambient = new THREE.AmbientLight(0xb9c4cf, 0.1);
     scene.add(this.ambient);
 
-    scene.fog = new THREE.Fog(0x9fb6cc, fogDistance * 0.28, fogDistance);
+    // La brume commencait a 28 % de sa portee : tout le champ moyen etait deja
+    // noye de blanc. Elle ne mord plus que sur le dernier tiers.
+    scene.fog = new THREE.Fog(0x9fb6cc, fogDistance * 0.62, fogDistance);
 
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.pmrem.compileEquirectangularShader();
@@ -95,8 +97,8 @@ export class Atmosphere {
     this.scene.fog.color.copy(fog);
     this.renderer.setClearColor(fog);
 
-    this.sky.material.uniforms.turbidity.value = 6.0 + 5 * (1 - day);
-    this.sky.material.uniforms.rayleigh.value = 0.8 + 1.1 * day;
+    this.sky.material.uniforms.turbidity.value = 2.6 + 4 * (1 - day);
+    this.sky.material.uniforms.rayleigh.value = 0.7 + 1.4 * day;
 
     this.isNight = elevation < 1;
     this._envDirty = true;

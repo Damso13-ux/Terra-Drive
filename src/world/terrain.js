@@ -22,7 +22,7 @@ export class Terrain {
     scene, proj, heightfield, ground, queue,
     radius = 3,
     lod = DEFAULT_LOD,
-    detailedImageryRings = 1,
+    imageryBoost = 2,
     rebuildBudget = 2,
   }) {
     this.scene = scene;
@@ -32,7 +32,7 @@ export class Terrain {
     this.queue = queue;
     this.radius = radius;
     this.lod = lod;
-    this.detailedImageryRings = detailedImageryRings;
+    this.imageryBoost = imageryBoost;
     this.zoom = heightfield.fineZoom;
     this.chunks = new Map();
     this.group = new THREE.Group();
@@ -129,7 +129,12 @@ export class Terrain {
   }
 
   _ensureTexture(chunk) {
-    const level = chunk.ring <= this.detailedImageryRings ? this.zoom + 1 : this.zoom;
+    // Le chunk sous les roues merite la meilleure imagerie possible : il n'y en a
+    // qu'un. L'anneau suivant en recoit une de moins, le reste se contente du
+    // niveau du terrain.
+    const boost =
+      chunk.ring === 0 ? this.imageryBoost : chunk.ring === 1 ? Math.min(1, this.imageryBoost) : 0;
+    const level = this.zoom + boost;
     if (chunk.textureLevel >= level || chunk.textureRequested === level) return;
     chunk.textureRequested = level;
     const job =
@@ -181,13 +186,14 @@ export class Terrain {
       });
   }
 
-  /** 2x2 tuiles du niveau superieur, assemblees en une texture 512 px. */
+  /** NxN tuiles d'un niveau superieur, assemblees en une seule texture. */
   _loadComposite(chunk, level) {
-    const bx = chunk.tx * 2;
-    const by = chunk.ty * 2;
+    const factor = Math.pow(2, level - this.zoom);
+    const bx = chunk.tx * factor;
+    const by = chunk.ty * factor;
     const jobs = [];
-    for (let j = 0; j < 2; j++) {
-      for (let i = 0; i < 2; i++) {
+    for (let j = 0; j < factor; j++) {
+      for (let i = 0; i < factor; i++) {
         const x = bx + i, y = by + j;
         const url = `${IMAGERY}/${level}/${y}/${x}`;
         jobs.push(
@@ -199,7 +205,7 @@ export class Terrain {
     }
     return Promise.all(jobs).then((parts) => {
       const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = TILE_PX * 2;
+      canvas.width = canvas.height = TILE_PX * factor;
       const ctx = canvas.getContext('2d');
       for (const { img, i, j } of parts) {
         ctx.drawImage(img, i * TILE_PX, j * TILE_PX, TILE_PX, TILE_PX);

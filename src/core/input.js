@@ -61,8 +61,8 @@ export class Input {
     const left = this.any(STEER_KEYS_LEFT);
     const right = this.any(STEER_KEYS_RIGHT);
 
-    s.throttle = approach(s.throttle, up ? 1 : 0, dt * (up ? 3.2 : 6));
-    s.brake = approach(s.brake, down ? 1 : 0, dt * (down ? 5 : 8));
+    s.throttle = approach(s.throttle, up ? 1 : 0, dt * (up ? 9 : 14));
+    s.brake = approach(s.brake, down ? 1 : 0, dt * (down ? 14 : 18));
     const steerTarget = (right ? 1 : 0) - (left ? 1 : 0);
     s.steer = approach(s.steer, steerTarget, dt * (steerTarget === 0 ? 6 : 3.6));
     s.handbrake = this.keys.has('Space') ? 1 : 0;

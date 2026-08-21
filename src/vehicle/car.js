@@ -36,16 +36,16 @@ export const DEFAULT_CONFIG = {
   // moteur
   idleRpm: 850,
   redlineRpm: 6900,
-  peakTorque: 330, // N.m
+  peakTorque: 420, // N.m
   peakTorqueRpm: 3800,
   gears: [-3.30, 0, 3.42, 2.10, 1.46, 1.11, 0.89, 0.74],
   finalDrive: 3.70,
   driveline: 0.88,
   drive: 'rwd', // 'rwd' | 'fwd' | 'awd'
 
-  brakeTorqueFront: 3200,
-  brakeTorqueRear: 2000,
-  handbrakeTorque: 3600,
+  brakeTorqueFront: 4600,
+  brakeTorqueRear: 2900,
+  handbrakeTorque: 4200,
 
   maxSteer: 0.60, // rad a l'arret
   minSteer: 0.115, // rad a grande vitesse
@@ -212,9 +212,11 @@ export class Vehicle {
     if (rpm > c.redlineRpm) return 0;
     const x = rpm / c.peakTorqueRpm;
     // plateau large : 0.55 a bas regime, 1.0 au pic, decroissance douce ensuite
+    // Plateau tres large : une voiture qui n'a de couple qu'a mi-regime donne
+    // exactement la sensation de mollesse qu'on cherche a eviter.
     let t;
-    if (x < 1) t = 0.55 + 0.45 * Math.sin((Math.PI / 2) * clamp(x, 0, 1));
-    else t = 1 - 0.30 * clamp((x - 1) / (c.redlineRpm / c.peakTorqueRpm - 1), 0, 1);
+    if (x < 1) t = 0.78 + 0.22 * Math.sin((Math.PI / 2) * clamp(x, 0, 1));
+    else t = 1 - 0.22 * clamp((x - 1) / (c.redlineRpm / c.peakTorqueRpm - 1), 0, 1);
     return c.peakTorque * t;
   }
 
@@ -413,8 +415,8 @@ export class Vehicle {
 
     if (this.assists.abs && brake > 0 && Math.abs(vLong) > 3) {
       // on relache la pression si la roue part au blocage
-      const lock = clamp(-slipRatio - 0.16, 0, 0.5) / 0.5;
-      brake *= 1 - 0.85 * lock;
+      const lock = clamp(-slipRatio - 0.22, 0, 0.5) / 0.5;
+      brake *= 1 - 0.45 * lock;
     }
 
     wheelTorque -= fx * wheel.radius;
@@ -432,7 +434,7 @@ export class Vehicle {
     wheel.angle += ((wheel.spin + spinBefore) * 0.5) * dt;
 
     // ---- resistance au roulement ------------------------------------------
-    const crr = 0.014 + (1 - wheel.onRoad) * 0.055;
+    const crr = 0.013 + (1 - wheel.onRoad) * 0.028;
     const roll = -Math.sign(vLong) * crr * fSus * Math.min(1, Math.abs(vLong) / 0.5);
 
     // ---- application ------------------------------------------------------
@@ -486,7 +488,8 @@ export class Vehicle {
     if (this.assists.tcs && throttle > 0) {
       let worst = 0;
       for (const w of driven) if (w.grounded) worst = Math.max(worst, Math.abs(w.slipRatio));
-      if (worst > 0.28) throttle *= clamp(1 - (worst - 0.28) * 2.2, 0.15, 1);
+      // Couper des 0.28 de glissement bridait l'acceleration en permanence.
+      if (worst > 0.65) throttle *= clamp(1 - (worst - 0.65) * 0.9, 0.55, 1);
     }
 
     let engine = throttle < 0.03 ? 0 : this.engineTorque(this.rpm) * throttle;
@@ -532,10 +535,10 @@ export class Vehicle {
 
     if (this.rpm > c.redlineRpm - 500 && this.gear < c.gears.length - 1 && this.input.throttle > 0.1) {
       this.gear++;
-      this.shiftTimer = 0.28;
+      this.shiftTimer = 0.16;
     } else if (this.rpm < 2300 && this.gear > 2) {
       this.gear--;
-      this.shiftTimer = 0.22;
+      this.shiftTimer = 0.12;
     }
   }
 

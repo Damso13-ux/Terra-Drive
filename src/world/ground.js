@@ -1,7 +1,9 @@
 // Surface de collision unique vue par la physique : le relief, ecrase par la chaussee
 // la ou il y en a une, avec un raccord doux sur les bas-cotes.
 
-const OFFROAD_GRIP = 0.6;
+// 0.6 transformait le moindre ecart en piege : on quittait la chaussee et la
+// voiture devenait incontrolable. Le bas-cote doit penaliser, pas punir.
+const OFFROAD_GRIP = 0.8;
 
 export class Ground {
   constructor(heightfield, roads) {

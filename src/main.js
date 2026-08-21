@@ -206,7 +206,7 @@ class Game {
       queue: this.queue,
       radius: q.terrainRadius,
       lod: q.lod,
-      detailedImageryRings: q.detailedImageryRings,
+      imageryBoost: q.imageryBoost,
       rebuildBudget: q.rebuildBudget,
     });
     this.roadMesh = new RoadMesh({ scene: this.scene, roads: this.roads, radius: q.roadRadius });

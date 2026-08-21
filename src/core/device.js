@@ -28,9 +28,9 @@ export function qualityProfile(device) {
     return {
       terrainRadius: 3,
       roadRadius: 2,
-      lod: [64, 48, 32, 16, 12],
-      detailedImageryRings: 1,
-      fogDistance: 2800,
+      lod: [96, 64, 40, 20, 14],
+      imageryBoost: 2, // anneau 0 en zoom+2 : ~0,85 m par pixel au sol
+      fogDistance: 2500,
       shadows: true,
       shadowMapSize: 2048,
       softShadows: true,
@@ -44,13 +44,13 @@ export function qualityProfile(device) {
   }
   const weak = device.cores <= 4;
   return {
-    terrainRadius: 2,
-    roadRadius: 1,
+    terrainRadius: 3,
+    roadRadius: 2,
     // L'anneau 0 ne compte qu'un seul chunk, celui sous les roues : on le garde
     // fin meme sur appareil modeste, c'est la que le sol doit suivre la chaussee.
-    lod: weak ? [48, 24, 16, 12, 8] : [64, 32, 20, 12, 8],
-    detailedImageryRings: 0, // imagerie fine sur le seul chunk sous les roues
-    fogDistance: 1700,
+    lod: weak ? [64, 32, 20, 12, 8] : [80, 44, 26, 14, 10],
+    imageryBoost: 2, // anneau 0 en zoom+2 : ~0,85 m par pixel au sol
+    fogDistance: 2400,
     // Coupees sur telephone : c'est le poste de rendu le plus couteux, et celui
     // dont le comportement varie le plus d'un GPU mobile a l'autre.
     shadows: false,

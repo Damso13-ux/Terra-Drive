@@ -21,27 +21,38 @@ const MIRRORS = [
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 
+// `raceway` etait exclu par reflexe : c'est pourtant le tag du Nurburgring, de
+// Spa et de la plupart des circuits. Dans un jeu de conduite, c'est exactement ce
+// qu'on veut trouver.
 const EXCLUDED =
-  'footway|path|cycleway|steps|pedestrian|bridleway|corridor|platform|proposed|construction|raceway|escape';
+  'footway|path|cycleway|steps|pedestrian|bridleway|corridor|platform|proposed|construction|escape';
 
-// largeur (m), adherence relative, rang (0 = axe majeur)
+// Largeur (m), adherence relative, rang (0 = axe majeur).
+//
+// Ces largeurs sont volontairement plus genereuses que la realite cadastrale.
+// Vu de l'interieur d'une voiture, une departementale a 6 m au trace exact donne
+// un ruban sur lequel on ne tient pas : la moindre correction envoie sur le
+// bas-cote. On elargit pour que ce soit jouable.
 const ROAD_CLASS = {
-  motorway: { w: 15.0, grip: 1.0, rank: 0 },
-  motorway_link: { w: 7.5, grip: 1.0, rank: 1 },
-  trunk: { w: 12.0, grip: 1.0, rank: 1 },
-  trunk_link: { w: 7.0, grip: 1.0, rank: 2 },
-  primary: { w: 10.0, grip: 0.99, rank: 2 },
-  primary_link: { w: 6.5, grip: 0.99, rank: 3 },
-  secondary: { w: 8.5, grip: 0.98, rank: 3 },
-  secondary_link: { w: 6.0, grip: 0.98, rank: 4 },
-  tertiary: { w: 7.5, grip: 0.97, rank: 4 },
-  tertiary_link: { w: 5.5, grip: 0.97, rank: 5 },
-  unclassified: { w: 6.0, grip: 0.95, rank: 5 },
-  residential: { w: 6.5, grip: 0.95, rank: 5 },
-  living_street: { w: 5.5, grip: 0.94, rank: 6 },
-  service: { w: 4.5, grip: 0.92, rank: 7 },
-  track: { w: 3.5, grip: 0.72, rank: 8 },
+  raceway: { w: 13.0, grip: 1.05, rank: 0 },
+  motorway: { w: 20.0, grip: 1.0, rank: 0 },
+  motorway_link: { w: 10.0, grip: 1.0, rank: 1 },
+  trunk: { w: 16.0, grip: 1.0, rank: 1 },
+  trunk_link: { w: 9.5, grip: 1.0, rank: 2 },
+  primary: { w: 13.5, grip: 0.99, rank: 2 },
+  primary_link: { w: 9.0, grip: 0.99, rank: 3 },
+  secondary: { w: 11.5, grip: 0.98, rank: 3 },
+  secondary_link: { w: 8.5, grip: 0.98, rank: 4 },
+  tertiary: { w: 10.0, grip: 0.97, rank: 4 },
+  tertiary_link: { w: 8.0, grip: 0.97, rank: 5 },
+  unclassified: { w: 8.5, grip: 0.95, rank: 5 },
+  residential: { w: 9.0, grip: 0.95, rank: 5 },
+  living_street: { w: 7.5, grip: 0.94, rank: 6 },
+  service: { w: 6.0, grip: 0.92, rank: 7 },
+  track: { w: 5.0, grip: 0.78, rank: 8 },
 };
+
+const MIN_WIDTH = 6.5; // en dessous, une route n'est plus praticable en jeu
 
 const LOOSE_SURFACES = new Set([
   'gravel', 'dirt', 'ground', 'unpaved', 'sand', 'grass',
@@ -50,7 +61,7 @@ const LOOSE_SURFACES = new Set([
 
 const CELL = 1200; // taille d'une cellule de streaming, en metres
 const STEP = 5; // pas de reechantillonnage le long d'une route, en metres
-const SHOULDER = 1.6; // largeur du raccord chaussee -> terrain, en metres
+const SHOULDER = 3.2; // largeur du raccord chaussee -> terrain, en metres
 const GRID = 48; // taille d'une cellule de la grille d'acceleration, en metres
 
 export const ROAD_CELL = CELL;
@@ -172,12 +183,14 @@ export class RoadNetwork {
 
     let width = cls.w;
     const lanes = parseInt(tags.lanes, 10);
-    if (Number.isFinite(lanes) && lanes > 0) width = Math.max(cls.w * 0.6, lanes * 3.3);
+    if (Number.isFinite(lanes) && lanes > 0) width = Math.max(cls.w * 0.75, lanes * 4.2);
     if (tags.width) {
       const w = parseFloat(tags.width);
-      if (Number.isFinite(w) && w > 1.5 && w < 40) width = w;
+      // la largeur cadastrale sert d'indication, pas de verite : on garde une marge
+      if (Number.isFinite(w) && w > 1.5 && w < 40) width = Math.max(w * 1.3, cls.w * 0.7);
     }
-    if (tags.oneway === 'yes' && !tags.lanes) width *= 0.62;
+    if (tags.oneway === 'yes' && !tags.lanes) width *= 0.78;
+    width = Math.max(width, MIN_WIDTH);
 
     let grip = cls.grip;
     if (tags.surface && LOOSE_SURFACES.has(tags.surface)) grip = Math.min(grip, 0.7);
