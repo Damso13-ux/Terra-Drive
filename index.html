@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Terra Drive — conduire le monde reel</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="view"></canvas>
+
+<div id="hud"></div>
+
+<div id="boot" class="overlay">
+  <div class="boot-card">
+    <h2>Preparation du terrain</h2>
+    <div class="boot-steps" data-steps></div>
+    <p class="boot-note">
+      Le relief vient de Copernicus / IGN, les routes d'OpenStreetMap, l'imagerie d'Esri.
+      Rien n'est precalcule : tout est construit a la volee autour de toi.
+    </p>
+  </div>
+</div>
+
+<div id="picker" class="overlay"></div>
+
+<div id="help">
+  <b>Z Q S D</b> ou <b>flechettes</b> conduire &nbsp;·&nbsp;
+  <b>Espace</b> frein a main &nbsp;·&nbsp;
+  <b>R</b> replacer &nbsp;·&nbsp;
+  <b>C</b> camera &nbsp;·&nbsp;
+  <b>L</b> phares &nbsp;·&nbsp;
+  <b>T</b> heure &nbsp;·&nbsp;
+  <b>G</b> aides &nbsp;·&nbsp;
+  <b>H</b> changer de lieu
+</div>
+
+<div id="attrib">
+  Relief © Copernicus / IGN RGE ALTI® / CNIG · Routes © contributeurs OpenStreetMap (ODbL) ·
+  Imagerie © Esri
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
