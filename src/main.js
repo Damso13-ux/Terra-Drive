@@ -196,6 +196,7 @@ class Game {
       fogDistance: q.fogDistance,
       shadows: q.shadows,
       shadowMapSize: q.shadowMapSize,
+      environmentMap: q.environmentMap,
     });
     this.terrain = new Terrain({
       scene: this.scene,
@@ -564,6 +565,7 @@ class Game {
       frames: this.frames,
       renderedGround: this.renderedGround,
       textureAverage: this.textureAverage,
+      atmosphere: this.atmosphere,
       roads: this.roads,
       terrain: this.terrain,
       queue: this.queue,
@@ -584,6 +586,37 @@ class Game {
         const chunk = [...this.terrain.chunks.values()].find((c) => c.texture && c.texture.image);
         if (chunk) this.textureAverage = averageColour(chunk.texture.image);
       }
+      this._checkLighting();
+    }
+  }
+
+  /**
+   * Auto-reparation de l'eclairage.
+   *
+   * Sur certains GPU mobiles (constate sur un Mali-G1-Ultra) la carte
+   * d'environnement generee par PMREM sort invalide : un NaN se propage dans le
+   * calcul d'eclairage et TOUTE la scene devient noire, alors que les textures,
+   * la geometrie et les lumieres sont parfaitement correctes. Symptome typique :
+   * le ciel s'affiche normalement (il n'est pas eclaire) et seul le lointain
+   * reste visible, parce que la brume s'applique apres l'eclairage.
+   *
+   * Plutot que de tenir une liste de GPU fautifs, on regarde le resultat.
+   */
+  _checkLighting() {
+    if (this._lightingChecked || !this.renderedGround) return;
+    if (this.frames < 150) return; // laisser le monde se construire
+    if (this.terrain.stats.textured === 0) return;
+    if (this.atmosphere.isNight) return; // la nuit, du noir est legitime
+
+    const [r, g, b] = this.renderedGround.split(',').map(Number);
+    if (!Number.isFinite(r)) return;
+    this._lightingChecked = true;
+    if (r + g + b > 8) return; // rendu normal
+
+    if (this.atmosphere.disableEnvironment()) {
+      this.renderedGround = null;
+      this._lightingChecked = false; // on verifiera que le correctif a pris
+      this.hud.toast('Eclairage adapte a ta carte graphique');
     }
   }
 }

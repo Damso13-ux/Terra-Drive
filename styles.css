@@ -762,3 +762,7 @@ button.primary:disabled {
   }
   .tc-menu-close { grid-column: 1 / -1; }
 }
+
+/* Le panneau gagne deux lignes : on resserre pour rester au-dessus du compteur. */
+#hud.compact .diag { font-size: 10.5px; padding: 7px 9px; }
+#hud.compact .diag-row { padding: 0.5px 0; }

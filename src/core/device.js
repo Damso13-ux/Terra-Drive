@@ -35,6 +35,7 @@ export function qualityProfile(device) {
       shadowMapSize: 2048,
       softShadows: true,
       antialias: true,
+      environmentMap: true,
       substep: 1 / 240,
       rebuildBudget: 2,
       skidPoints: 2400,
@@ -56,6 +57,11 @@ export function qualityProfile(device) {
     shadowMapSize: 1024,
     softShadows: false,
     antialias: false, // le plafonnement du pixelRatio fait deja le travail
+    // PMREM rend dans des cibles en demi-flottant, mal supportees par une partie
+    // des GPU mobiles : la carte d'environnement en ressort invalide et empoisonne
+    // TOUT le calcul d'eclairage (un NaN se propage), ce qui rend la scene
+    // entierement noire. On s'en passe, et on compense en lumiere directe.
+    environmentMap: false,
     substep: 1 / 180,
     rebuildBudget: 1,
     skidPoints: 900,

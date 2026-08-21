@@ -12,7 +12,9 @@ export class Atmosphere {
     shadows = true,
     shadowMapSize = 2048,
     shadowExtent = SHADOW_EXTENT,
+    environmentMap = true,
   } = {}) {
+    this.useEnvironment = environmentMap;
     this.scene = scene;
     this.renderer = renderer;
     this.fogDistance = fogDistance;
@@ -44,6 +46,11 @@ export class Atmosphere {
     this.hemi = new THREE.HemisphereLight(0x93b2d8, 0x7a6c52, 0.6);
     scene.add(this.hemi);
 
+    // Filet de securite : meme si le ciel, la carte d'environnement ou le soleil
+    // se comportent mal sur un GPU donne, la scene reste visible.
+    this.ambient = new THREE.AmbientLight(0xb9c4cf, 0.1);
+    scene.add(this.ambient);
+
     scene.fog = new THREE.Fog(0x9fb6cc, fogDistance * 0.28, fogDistance);
 
     this.pmrem = new THREE.PMREMGenerator(renderer);
@@ -72,7 +79,17 @@ export class Atmosphere {
     const day = THREE.MathUtils.clamp((elevation + 4) / 20, 0, 1);
     this.sun.intensity = 0.05 + 1.25 * day;
     this.sun.color.setHSL(0.09 + 0.03 * day, 0.55 - 0.4 * day, 0.55 + 0.45 * day);
-    this.hemi.intensity = 0.03 + 0.10 * day;
+    if (this.useEnvironment) {
+      this.hemi.intensity = 0.03 + 0.10 * day;
+      this.ambient.intensity = 0.02 + 0.05 * day;
+    } else {
+      // Sans carte d'environnement, tout l'eclairage indirect repose sur
+      // l'hemispherique et l'ambiante. Valeurs calibrees en mesurant la couleur
+      // reellement rendue au sol, pour retrouver la luminosite du mode complet
+      // (reference 69,69,78 ; on obtient ~68 sans toucher au ciel).
+      this.hemi.intensity = 0.12 + 4.90 * day;
+      this.ambient.intensity = 0.15 + 5.35 * day;
+    }
 
     const fog = new THREE.Color().setHSL(0.58, 0.26 + 0.10 * (1 - day), 0.05 + 0.34 * day);
     this.scene.fog.color.copy(fog);
@@ -85,6 +102,23 @@ export class Atmosphere {
     this._envDirty = true;
   }
 
+  /**
+   * Retire la carte d'environnement et repasse en eclairage direct.
+   * Appele quand le rendu s'avere noir : sur certains GPU (Mali notamment) la
+   * carte generee par PMREM sort invalide et un NaN se propage dans tout le
+   * calcul d'eclairage.
+   */
+  disableEnvironment() {
+    if (!this.useEnvironment) return false;
+    this.useEnvironment = false;
+    if (this.scene.environment) {
+      this.scene.environment.dispose();
+      this.scene.environment = null;
+    }
+    this.setHour(this.hour);
+    return true;
+  }
+
   /** Suit la voiture : le ciel et la zone d'ombre restent centres sur elle. */
   update(target, dt) {
     this.sky.position.set(target.x, 0, target.z);
@@ -92,7 +126,7 @@ export class Atmosphere {
     this.sun.position.copy(target).addScaledVector(this._sunDir, 260);
     this.sun.target.updateMatrixWorld();
 
-    if (this._envDirty) {
+    if (this._envDirty && this.useEnvironment) {
       this._envTimer -= dt;
       if (this._envTimer <= 0) {
         this._refreshEnvironment();
@@ -103,6 +137,7 @@ export class Atmosphere {
   }
 
   _refreshEnvironment() {
+    if (!this.useEnvironment) return;
     if (this.scene.environment) this.scene.environment.dispose();
     this._envScene.add(this.sky);
     const rt = this.pmrem.fromScene(this._envScene, 0.04);

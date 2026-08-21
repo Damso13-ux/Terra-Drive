@@ -145,6 +145,35 @@ altimétrique de chaque route est lissé sous contrainte, et le terrain est ensu
 *creusé* pour épouser la chaussée. C'est ce qui fait la différence entre une route en
 tôle ondulée et une route roulable.
 
+### La carte d'environnement et les GPU Mali
+
+Sur un **Mali-G1-Ultra MC12** (Chrome Android), toute la scène s'affichait
+**noire** : terrain, voiture, tout — sauf le ciel, et sauf le lointain.
+
+Le diagnostic embarqué a permis de trancher sans accès à l'appareil. Textures
+chargées (`21 ok / 0 ko`) et bien colorées (`rgb(60,77,50)`), lumières
+correctement configurées (soleil 1.30, hémisphérique 0.13), caméra à 2,7 m
+au-dessus du sol, 60 fps — et pourtant `sol rendu` valait **`rgb(0,0,0)`, zéro
+absolu**, pendant que `ciel` valait `rgb(230,242,247)`.
+
+Zéro exact avec des lumières actives, ce n'est pas « trop sombre » : c'est un
+**NaN qui se propage**. Le seul terme fragile était la carte d'environnement,
+générée par `PMREMGenerator`, qui rend dans des cibles en demi-flottant — mal
+supportées par une partie des GPU Mali. Le NaN empoisonnait tout le calcul
+d'éclairage. Deux détails confirmaient le diagnostic : le ciel est un shader
+sans éclairage, donc épargné ; et la brume s'applique *après* l'éclairage, donc
+seules les montagnes lointaines (brume à 100 %) restaient visibles.
+
+Deux réponses, complémentaires :
+
+1. **Préventif** — pas de carte d'environnement sur mobile. L'éclairage indirect
+   passe entièrement par l'hémisphérique et l'ambiante, calibrées en mesurant la
+   couleur réellement rendue au sol pour retrouver la luminosité du mode complet.
+2. **Curatif** — `_checkLighting()` dans `main.js` échantillonne le rendu après
+   150 images. Si le sol sort noir alors que les textures sont chargées et qu'il
+   fait jour, la carte d'environnement est retirée à chaud. Aucune liste de GPU
+   fautifs à maintenir : on regarde le résultat, pas le nom du matériel.
+
 ### Adaptation mobile
 
 Un seul endroit arbitre qualité et fluidité : `qualityProfile()` dans

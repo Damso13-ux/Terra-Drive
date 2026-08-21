@@ -105,7 +105,7 @@ export class Hud {
     this._drawMinimap(vehicle, roads);
   }
 
-  _drawDiag({ roads, terrain, queue, roadQueue, heightfield, vehicle, camera, frames, renderedGround, textureAverage }) {
+  _drawDiag({ roads, terrain, queue, roadQueue, heightfield, vehicle, camera, frames, renderedGround, textureAverage, atmosphere }) {
     const pending = queue.queued + queue.active + roadQueue.queued + roadQueue.active;
     const failed = queue.stats.failed + roadQueue.stats.failed;
     const quality = heightfield.lastQuality;
@@ -125,6 +125,12 @@ export class Hud {
     // Volontairement court : ce panneau vit dans un coin d'ecran de telephone.
     // Le detail complet est dans le rapport technique, accessible par le menu.
     const sous = dVoiture < -0.5 || dCamera < 0.5;
+    // soleil / hemispherique / ambiante, et presence d'une carte d'environnement
+    const a = atmosphere;
+    const light = a
+      ? a.sun.intensity.toFixed(1) + '/' + a.hemi.intensity.toFixed(2) +
+        '/' + a.ambient.intensity.toFixed(2) + (a.useEnvironment ? '+env' : '')
+      : '?';
     this.diagEl.innerHTML =
       row('images', frames, frames < 5) +
       row('fps', Math.round(this.fps)) +
@@ -134,6 +140,8 @@ export class Hud {
       row('reseau', pending + ' / ' + failed + ' ko', failed > 0) +
       row('textures', terrain.stats.textured + ' / ' + terrain.stats.textureFailed + ' ko',
           terrain.stats.textureFailed > 0) +
+      row('lumiere', light, false) +
+      row('camera/sol', dCamera.toFixed(1) + ' m', dCamera < 0.5) +
       // Les deux valeurs qui tranchent entre "texture noire" et "lumiere nulle".
       row('texture moy', textureAverage || '...', textureAverage === 'rgb(0,0,0)') +
       row('sol rendu', renderedGround || '...', renderedGround === '0,0,0') +
