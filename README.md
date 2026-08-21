@@ -43,7 +43,7 @@ L'URL contient le point de départ (`#latitude,longitude,nom`) : elle est partag
 
 | Donnée | Source | Licence |
 |---|---|---|
-| Altitude | Tuiles Terrarium (Copernicus DEM, IGN RGE ALTI®, CNIG) | voir `ATTRIBUTIONS.md` |
+| Altitude | Tuiles Terrarium (Copernicus DEM COP-DEM-GLO-30, IGN RGE ALTI®, CNIG) | © EU/ESA/IGN/CNIG |
 | Routes | OpenStreetMap via Overpass API | ODbL |
 | Imagerie | Esri World Imagery | conditions Esri |
 | Recherche de lieux | Nominatim | ODbL |
