@@ -8,6 +8,7 @@ import { RoadNetwork } from './world/roads.js';
 import { Ground } from './world/ground.js';
 import { Terrain } from './world/terrain.js';
 import { RoadMesh } from './world/roadmesh.js';
+import { Buildings } from './world/buildings.js';
 import { Atmosphere } from './world/sky.js';
 import { Vehicle } from './vehicle/car.js';
 import { CarView } from './vehicle/carview.js';
@@ -16,7 +17,9 @@ import { Input } from './core/input.js';
 import { Hud } from './ui/hud.js';
 import { Picker } from './ui/picker.js';
 import { TouchControls } from './ui/touch.js';
+import { Settings } from './ui/settings.js';
 import { detectDevice, qualityProfile } from './core/device.js';
+import { findVehicle, DEFAULT_VEHICLE } from './vehicle/catalogue.js';
 
 const ROAD_RADIUS = 2600; // rayon de chargement du reseau routier, en metres (bureau)
 const SPAWN_SEARCH = 350; // distance max pour trouver une route au point de depart
@@ -56,6 +59,25 @@ class Boot {
 }
 
 const NEWLINE = String.fromCharCode(10);
+
+/** Preferences persistantes. Le mode prive fait echouer localStorage : on encaisse. */
+export const prefs = {
+  get(key, fallback) {
+    try {
+      const v = localStorage.getItem('terra:' + key);
+      return v === null ? fallback : v;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem('terra:' + key, value);
+    } catch {
+      /* rien a faire : ce n'est qu'un confort */
+    }
+  },
+};
 
 /** Couleur moyenne d'une image, pour savoir si une texture est bien coloree. */
 function averageColour(image) {
@@ -120,7 +142,7 @@ class Game {
   constructor(canvas) {
     this.canvas = canvas;
     this.device = detectDevice();
-    this.quality = qualityProfile(this.device);
+    this.quality = qualityProfile(this.device, prefs.get('quality', 'auto'));
     const q = this.quality;
 
     this.renderer = new THREE.WebGLRenderer({
@@ -210,14 +232,43 @@ class Game {
       rebuildBudget: q.rebuildBudget,
     });
     this.roadMesh = new RoadMesh({ scene: this.scene, roads: this.roads, radius: q.roadRadius });
+    this.buildings = new Buildings({
+      scene: this.scene,
+      proj: this.proj,
+      ground: this.ground,
+      queue: this.roadQueue,
+      radius: q.buildingRadius,
+    });
+    this.buildings.setEnabled(q.buildings);
     this.heightfield.onTile = (tx2, ty2) => this.terrain.markTileDirty(tx2, ty2);
 
-    this.vehicle = new Vehicle(this.ground, { substep: q.substep });
-    this.carView = new CarView(this.scene, this.vehicle, { skidPoints: q.skidPoints });
+    const chosen = findVehicle(prefs.get('vehicle', DEFAULT_VEHICLE));
+    this.vehicleEntry = chosen;
+    this.vehicle = new Vehicle(this.ground, { ...chosen.config, substep: q.substep });
+    this.carView = new CarView(this.scene, this.vehicle, {
+      color: chosen.colour,
+      skidPoints: q.skidPoints,
+    });
     this.chase = new ChaseCamera(this.camera, this.ground);
     this.input = new Input();
 
     this.hud = new Hud(document.getElementById('hud'), { compact: this.device.mobile });
+    this.actions = this.buildActions();
+    this.settings = new Settings(document.getElementById('settings'), {
+      onVehicle: (id) => this.setVehicle(id),
+      onQuality: (preset) => {
+        const q = this.applyQuality(preset);
+        this.hud.toast('Qualite : ' + q.resolved);
+      },
+      onAssists: () => this.actions.assists(),
+      getState: () => ({
+        vehicleId: this.vehicleEntry.id,
+        preset: this.quality.preset,
+        resolved: this.quality.resolved,
+        quality: this.quality,
+        assists: this.vehicle.assists.abs && this.vehicle.assists.tcs,
+      }),
+    });
     if (this.device.mobile) this.setupTouch();
     this.spawn();
 
@@ -438,6 +489,72 @@ class Game {
     return L.join(NEWLINE);
   }
 
+  /**
+   * Change de vehicule sans quitter la partie : on garde la place exacte, le cap
+   * et l'etat des phares.
+   */
+  setVehicle(id) {
+    const entry = findVehicle(id);
+    prefs.set('vehicle', entry.id);
+    if (!this.vehicle || entry.id === this.vehicleEntry.id) return entry;
+
+    const p = this.vehicle.position.clone();
+    const q = this.vehicle.quaternion;
+    const heading = Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.y * q.y + q.x * q.x)
+    );
+    const lights = this.carView.lightsOn;
+
+    this.carView.dispose();
+    this.vehicleEntry = entry;
+    this.vehicle = new Vehicle(this.ground, { ...entry.config, substep: this.quality.substep });
+    this.carView = new CarView(this.scene, this.vehicle, {
+      color: entry.colour,
+      skidPoints: this.quality.skidPoints,
+    });
+    this.vehicle.placeAt(p.x, this.ground.height(p.x, p.z), p.z, heading);
+    this.carView.setLights(lights);
+    this.hud.toast(entry.name);
+    return entry;
+  }
+
+  /** Applique un preset de qualite a chaud, sans recharger la page. */
+  applyQuality(preset) {
+    prefs.set('quality', preset);
+    const q = (this.quality = qualityProfile(this.device, preset));
+
+    this.renderer.setPixelRatio(q.pixelRatio);
+    this.renderer.shadowMap.enabled = q.shadows;
+    this.renderer.shadowMap.type = q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    this.atmosphere.setShadows(q.shadows);
+
+    this.scene.fog.far = q.fogDistance;
+    this.scene.fog.near = q.fogDistance * 0.62;
+
+    this.terrain.radius = q.terrainRadius;
+    this.terrain.lod = q.lod;
+    this.terrain.imageryBoost = q.imageryBoost;
+    this.terrain._rebuildBudget = q.rebuildBudget;
+    this.terrain.invalidateAll();
+    this.terrain.refreshTextures();
+
+    this.roadMesh.radius = q.roadRadius;
+    this.buildings.radius = q.buildingRadius;
+    this.buildings.setEnabled(q.buildings);
+    this.vehicle.substep = q.substep;
+
+    // Basculer les ombres change le programme des shaders : il faut le signaler.
+    this.scene.traverse((o) => {
+      if (!o.material) return;
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of list) m.needsUpdate = true;
+    });
+
+    this.resize();
+    return q;
+  }
+
   /** Actions du jeu, partagees par le clavier et les commandes tactiles. */
   buildActions() {
     return {
@@ -471,6 +588,7 @@ class Game {
       },
       hint: (message) => this.hud.toast(message),
       report: () => this.buildReport(),
+      settings: () => this.settings.toggle(),
     };
   }
 
@@ -506,6 +624,8 @@ class Game {
     i.on('F3', a.diag);
     i.on('KeyP', a.pause);
     i.on('KeyG', a.assists);
+    i.on('KeyO', a.settings);
+    i.on('Escape', () => this.settings.close());
 
     // souris pour la camera orbitale
     let dragging = false;
@@ -554,6 +674,8 @@ class Game {
     this.terrain.update(p.x, p.z);
     this.roads.ensureArea(p.x, p.z, this.device.mobile ? 1500 : ROAD_RADIUS);
     this.roadMesh.update(p.x, p.z);
+    this.buildings.ensureArea(p.x, p.z);
+    this.buildings.update(p.x, p.z);
     this.atmosphere.update(p, dt);
     this.chase.update(this.vehicle, dt);
     this.carView.update(dt);

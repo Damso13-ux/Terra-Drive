@@ -114,6 +114,22 @@ export class CarView {
     this.lightsOn = false;
 
     this.skid = new SkidMarks(scene, vehicle, skidPoints);
+    this.scene = scene;
+  }
+
+  /** Libere tout : necessaire pour changer de vehicule sans fuite. */
+  dispose() {
+    this.scene.remove(this.group);
+    this.group.traverse((o) => {
+      if (o.isMesh) {
+        o.geometry.dispose();
+        if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
+        else o.material.dispose();
+      }
+    });
+    this.scene.remove(this.skid.points);
+    this.skid.points.geometry.dispose();
+    this.skid.points.material.dispose();
   }
 
   setLights(on) {

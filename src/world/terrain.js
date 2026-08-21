@@ -227,6 +227,14 @@ export class Terrain {
     }
   }
 
+  /** Redemande les textures apres un changement de niveau de detail. */
+  refreshTextures() {
+    for (const chunk of this.chunks.values()) {
+      chunk.textureRequested = false;
+      this._ensureTexture(chunk);
+    }
+  }
+
   invalidateAll() {
     for (const chunk of this.chunks.values()) chunk.dirty = true;
   }

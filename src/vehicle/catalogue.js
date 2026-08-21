@@ -1,0 +1,198 @@
+// Catalogue de vehicules.
+//
+// Chaque entree ne change pas qu'un chiffre de puissance : masse, empattement,
+// hauteur du centre de gravite, raideur de suspension, etagement, transmission
+// et adherence sont coherents entre eux. C'est ce qui fait qu'une citadine et un
+// pick-up ne se conduisent pas de la meme facon, au-dela du chronometre.
+
+export const VEHICLES = [
+  {
+    id: 'citadine',
+    name: 'Citadine',
+    tagline: 'Legere, traction, sans prétention',
+    description:
+      'Peu de couple mais peu de masse. Elle se jette dans les virages serrés et ' +
+      'pardonne beaucoup. Sous-vireuse dès qu\'on insiste.',
+    colour: 0x3fa9dc,
+    stats: { puissance: 2, tenue: 3, agilite: 4, tout_terrain: 2 },
+    config: {
+      mass: 980,
+      wheelBase: 2.47,
+      track: 1.48,
+      bodyLength: 3.85,
+      bodyWidth: 1.70,
+      bodyHeight: 1.48,
+      wheelRadius: 0.30,
+      wheelWidth: 0.19,
+      wheelAttachY: 0.12,
+      suspensionRest: 0.38,
+      suspensionTravel: 0.20,
+      stiffnessFront: 22000,
+      stiffnessRear: 24000,
+      dampCompression: 1900,
+      dampRebound: 2600,
+      antiRollFront: 7000,
+      antiRollRear: 5000,
+      peakTorque: 200,
+      peakTorqueRpm: 3200,
+      redlineRpm: 6400,
+      gears: [-3.55, 0, 3.75, 2.05, 1.36, 1.03, 0.82],
+      finalDrive: 3.94,
+      drive: 'fwd',
+      brakeTorqueFront: 3200,
+      brakeTorqueRear: 1700,
+      handbrakeTorque: 3000,
+      tyreGrip: 1.30,
+      dragArea: 0.66,
+      downforce: 0.10,
+      maxSteer: 0.64,
+      offroadBonus: 0.0,
+    },
+  },
+  {
+    id: 'berline',
+    name: 'Berline sportive',
+    tagline: 'Propulsion, équilibrée',
+    description:
+      'Le compromis. Assez de couple pour décrocher l\'arrière à la demande, ' +
+      'assez de châssis pour le rattraper. Le véhicule de référence.',
+    colour: 0xd23c2e,
+    stats: { puissance: 3, tenue: 4, agilite: 3, tout_terrain: 2 },
+    config: {}, // valeurs par defaut de car.js
+  },
+  {
+    id: 'gt',
+    name: 'GT',
+    tagline: 'Beaucoup trop de couple',
+    description:
+      'Centre de gravité au ras du sol, appui aérodynamique, pneus larges. ' +
+      'Redoutable sur un col dégagé, ingérable sur un chemin.',
+    colour: 0xf2c010,
+    stats: { puissance: 5, tenue: 5, agilite: 3, tout_terrain: 1 },
+    config: {
+      mass: 1490,
+      wheelBase: 2.70,
+      track: 1.70,
+      bodyLength: 4.55,
+      bodyWidth: 1.96,
+      bodyHeight: 1.18,
+      wheelRadius: 0.35,
+      wheelWidth: 0.30,
+      wheelAttachY: 0.04, // centre de gravite tres bas
+      suspensionRest: 0.32,
+      suspensionTravel: 0.15,
+      stiffnessFront: 62000,
+      stiffnessRear: 68000,
+      dampCompression: 4200,
+      dampRebound: 5600,
+      antiRollFront: 26000,
+      antiRollRear: 20000,
+      peakTorque: 760,
+      peakTorqueRpm: 4600,
+      redlineRpm: 8200,
+      gears: [-3.10, 0, 3.15, 2.05, 1.52, 1.18, 0.95, 0.78, 0.66],
+      finalDrive: 3.45,
+      drive: 'rwd',
+      brakeTorqueFront: 6800,
+      brakeTorqueRear: 4200,
+      handbrakeTorque: 4200,
+      tyreGrip: 1.82,
+      dragArea: 0.62,
+      downforce: 0.95,
+      maxSteer: 0.50,
+      offroadBonus: -0.12, // pneus lisses : encore pire hors bitume
+    },
+  },
+  {
+    id: 'rallye',
+    name: 'Rallye 4x4',
+    tagline: 'Transmission intégrale, débattement long',
+    description:
+      'Faite pour ce que le bitume ne couvre pas. Elle encaisse les ornières et ' +
+      'garde de la motricité là où les autres patinent.',
+    colour: 0x2fb45f,
+    stats: { puissance: 4, tenue: 3, agilite: 4, tout_terrain: 5 },
+    config: {
+      mass: 1360,
+      wheelBase: 2.58,
+      track: 1.62,
+      bodyLength: 4.20,
+      bodyWidth: 1.84,
+      bodyHeight: 1.44,
+      wheelRadius: 0.34,
+      wheelWidth: 0.25,
+      wheelAttachY: 0.16,
+      suspensionRest: 0.50, // gros debattement
+      suspensionTravel: 0.34,
+      stiffnessFront: 30000,
+      stiffnessRear: 32000,
+      dampCompression: 3000,
+      dampRebound: 3900,
+      antiRollFront: 9000,
+      antiRollRear: 7000,
+      peakTorque: 520,
+      peakTorqueRpm: 3400,
+      redlineRpm: 7000,
+      gears: [-3.40, 0, 3.60, 2.25, 1.62, 1.25, 1.00, 0.83],
+      finalDrive: 3.80,
+      drive: 'awd',
+      brakeTorqueFront: 4800,
+      brakeTorqueRear: 3400,
+      handbrakeTorque: 5200,
+      tyreGrip: 1.48,
+      dragArea: 0.82,
+      downforce: 0.18,
+      maxSteer: 0.66,
+      offroadBonus: 0.30, // pneus a crampons
+    },
+  },
+  {
+    id: 'pickup',
+    name: 'Pick-up',
+    tagline: 'Lourd, haut, coupleux',
+    description:
+      'Beaucoup de couple à bas régime et beaucoup de masse à déplacer. Il roule ' +
+      'fort, freine mal et se penche dans tout ce qui tourne.',
+    colour: 0xe07a2a,
+    stats: { puissance: 4, tenue: 2, agilite: 1, tout_terrain: 4 },
+    config: {
+      mass: 2280,
+      wheelBase: 3.22,
+      track: 1.72,
+      bodyLength: 5.35,
+      bodyWidth: 1.98,
+      bodyHeight: 1.86,
+      wheelRadius: 0.39,
+      wheelWidth: 0.28,
+      wheelAttachY: 0.30, // centre de gravite haut : ca se penche
+      suspensionRest: 0.46,
+      suspensionTravel: 0.28,
+      stiffnessFront: 40000,
+      stiffnessRear: 46000,
+      dampCompression: 3400,
+      dampRebound: 4300,
+      antiRollFront: 8000,
+      antiRollRear: 6000,
+      peakTorque: 620,
+      peakTorqueRpm: 2200,
+      redlineRpm: 4600,
+      gears: [-3.20, 0, 4.20, 2.40, 1.55, 1.10, 0.85, 0.70],
+      finalDrive: 3.55,
+      drive: 'awd',
+      brakeTorqueFront: 5200,
+      brakeTorqueRear: 4000,
+      handbrakeTorque: 4800,
+      tyreGrip: 1.26,
+      dragArea: 1.15,
+      downforce: 0.05,
+      maxSteer: 0.58,
+      offroadBonus: 0.20,
+    },
+  },
+];
+
+export const DEFAULT_VEHICLE = 'berline';
+
+export function findVehicle(id) {
+  return VEHICLES.find((v) => v.id === id) || VEHICLES.find((v) => v.id === DEFAULT_VEHICLE);
+}

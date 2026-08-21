@@ -53,6 +53,7 @@ export class TouchControls {
       <button class="tc-pedal tc-hand" data-pedal="handbrake" aria-label="Frein a main">P</button>
 
       <div class="tc-menu" data-menu>
+        <button data-act="settings">Reglages</button>
         <button data-act="lights">Phares</button>
         <button data-act="time">Heure suivante</button>
         <button data-act="assists">Aides de conduite</button>

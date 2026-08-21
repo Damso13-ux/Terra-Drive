@@ -104,6 +104,11 @@ export class Atmosphere {
     this._envDirty = true;
   }
 
+  setShadows(on) {
+    this.shadowsEnabled = on;
+    this.sun.castShadow = on;
+  }
+
   /**
    * Retire la carte d'environnement et repasse en eclairage direct.
    * Appele quand le rendu s'avere noir : sur certains GPU (Mali notamment) la

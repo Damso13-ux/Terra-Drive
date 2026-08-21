@@ -53,6 +53,9 @@ export const DEFAULT_CONFIG = {
 
   substep: 1 / 240, // pas d'integration fixe ; 1/180 suffit sur mobile
   tyreGrip: 1.55, // coefficient de base, module par la surface
+  // Ce que valent les pneus hors bitume : positif pour des crampons, negatif
+  // pour des semi-slicks. Applique proportionnellement a la sortie de chaussee.
+  offroadBonus: 0,
   dragArea: 0.72, // Cd * A
   downforce: 0.32,
 };
@@ -348,8 +351,8 @@ export class Vehicle {
     const probe = this.ground.probe(wheel.contact.x, wheel.contact.z);
     const n = this.ground.normal(wheel.contact.x, wheel.contact.z);
     wheel.normal.set(n.x, n.y, n.z);
-    wheel.surfaceGrip = probe.grip;
     wheel.onRoad = probe.onRoad;
+    wheel.surfaceGrip = probe.grip * (1 + (1 - probe.onRoad) * c.offroadBonus);
 
     const susLen = clamp(t - wheel.radius, c.suspensionRest - c.suspensionTravel, c.suspensionRest);
     wheel.suspensionLength = susLen;
