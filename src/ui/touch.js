@@ -31,8 +31,8 @@ export class TouchControls {
 
     root.innerHTML = `
       <div class="tc-buttons">
-        <button class="tc-btn" data-act="respawn" aria-label="Se replacer sur la route">&#10227;</button>
-        <button class="tc-btn" data-act="camera" aria-label="Changer de camera">&#9635;</button>
+        <button class="tc-btn" data-act="respawn" aria-label="Se replacer sur la route">&#10227;&#65038;</button>
+        <button class="tc-btn" data-act="camera" aria-label="Changer de camera">&#9635;&#65038;</button>
         <button class="tc-btn" data-act="menu" aria-label="Menu">&#9776;</button>
       </div>
 
@@ -50,7 +50,7 @@ export class TouchControls {
         <button class="tc-pedal tc-brake" data-pedal="brake" aria-label="Freiner">FREIN</button>
         <button class="tc-pedal tc-gas" data-pedal="throttle" aria-label="Accelerer">GAZ</button>
       </div>
-      <button class="tc-pedal tc-hand" data-pedal="handbrake" aria-label="Frein a main">&#9209;</button>
+      <button class="tc-pedal tc-hand" data-pedal="handbrake" aria-label="Frein a main">P</button>
 
       <div class="tc-menu" data-menu>
         <button data-act="lights">Phares</button>

@@ -50,7 +50,9 @@ export function qualityProfile(device) {
     lod: weak ? [48, 24, 16, 12, 8] : [64, 32, 20, 12, 8],
     detailedImageryRings: 0, // imagerie fine sur le seul chunk sous les roues
     fogDistance: 1700,
-    shadows: !weak,
+    // Coupees sur telephone : c'est le poste de rendu le plus couteux, et celui
+    // dont le comportement varie le plus d'un GPU mobile a l'autre.
+    shadows: false,
     shadowMapSize: 1024,
     softShadows: false,
     antialias: false, // le plafonnement du pixelRatio fait deja le travail

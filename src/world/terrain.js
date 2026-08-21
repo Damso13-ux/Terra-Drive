@@ -47,7 +47,7 @@ export class Terrain {
     });
 
     this._rebuildBudget = rebuildBudget; // chunks reconstruits par frame, au maximum
-    this.stats = { chunks: 0, textured: 0, rebuilding: 0 };
+    this.stats = { chunks: 0, textured: 0, rebuilding: 0, textureFailed: 0 };
   }
 
   key(tx, ty) {
@@ -154,6 +154,7 @@ export class Terrain {
       })
       .catch(() => {
         chunk.textureRequested = -1; // on retentera si le chunk change d'anneau
+        this.stats.textureFailed++;
       });
   }
 

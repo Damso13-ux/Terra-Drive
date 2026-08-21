@@ -16,6 +16,20 @@ const ROAD_STYLE = {
   8: { w: 1.0, c: '#8a7a5c' },
 };
 
+/** Nom du GPU, quand le navigateur veut bien le donner. */
+function describeGpu() {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl) return 'aucun WebGL';
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    return String(name).slice(0, 60);
+  } catch {
+    return 'inconnu';
+  }
+}
+
 export class Hud {
   constructor(root, { compact = false } = {}) {
     this.root = root;
@@ -51,9 +65,8 @@ export class Hud {
     this.fps = 60;
     this._acc = 0;
     this._toastTimer = 0;
-    // sur petit ecran, le diagnostic mange trop de place : il reste accessible au menu
-    this.showDiag = !compact;
-    if (compact) this.diagEl.style.display = 'none';
+    this.showDiag = true;
+    this.gpu = describeGpu();
   }
 
   toast(message, seconds = 2.6) {
@@ -67,7 +80,8 @@ export class Hud {
     this.diagEl.style.display = this.showDiag ? '' : 'none';
   }
 
-  update(dt, { vehicle, roads, terrain, queue, roadQueue, heightfield, placeName }) {
+  update(dt, ctx) {
+    const { vehicle, roads, placeName } = ctx;
     this.fps += (1 / Math.max(dt, 1e-4) - this.fps) * 0.08;
 
     if (this._toastTimer > 0) {
@@ -87,24 +101,43 @@ export class Hud {
     this.rpmEl.classList.toggle('redline', rev > 0.92);
     if (placeName !== undefined) this.placeEl.textContent = placeName;
 
-    if (this.showDiag) this._drawDiag({ roads, terrain, queue, roadQueue, heightfield });
+    if (this.showDiag) this._drawDiag(ctx);
     this._drawMinimap(vehicle, roads);
   }
 
-  _drawDiag({ roads, terrain, queue, roadQueue, heightfield }) {
+  _drawDiag({ roads, terrain, queue, roadQueue, heightfield, vehicle, camera, frames }) {
     const pending = queue.queued + queue.active + roadQueue.queued + roadQueue.active;
     const failed = queue.stats.failed + roadQueue.stats.failed;
-    const warn = failed > 0;
     const quality = heightfield.lastQuality;
-    const qualityLabel = quality === 2 ? 'fine' : quality === 1 ? 'approchee' : 'absente';
-    this.diagEl.innerHTML = `
-      <div class="diag-row"><span>fps</span><b>${Math.round(this.fps)}</b></div>
-      <div class="diag-row"><span>altitude</span><b class="${quality < 2 ? 'warn' : ''}">${qualityLabel}</b></div>
-      <div class="diag-row"><span>chunks</span><b>${terrain.stats.chunks}</b></div>
-      <div class="diag-row"><span>routes</span><b>${roads.stats.ways}</b></div>
-      <div class="diag-row"><span>en attente</span><b>${pending}</b></div>
-      <div class="diag-row"><span>echecs</span><b class="${warn ? 'warn' : ''}">${failed}</b></div>
-    `;
+    const qualityLabel = quality === 2 ? 'fine' : quality === 1 ? 'approchee' : 'ABSENTE';
+
+    // Les deux mesures qui expliquent un ecran noir ou une voiture immobile :
+    // la voiture est-elle sous le sol, et la camera est-elle dans le decor ?
+    const p = vehicle.position;
+    const solVoiture = vehicle.ground.height(p.x, p.z);
+    const dVoiture = p.y - solVoiture;
+    const solCamera = vehicle.ground.height(camera.position.x, camera.position.z);
+    const dCamera = camera.position.y - solCamera;
+
+    const row = (label, value, bad) =>
+      `<div class="diag-row"><span>${label}</span><b class="${bad ? 'warn' : ''}">${value}</b></div>`;
+
+    this.diagEl.innerHTML =
+      row('images', frames, frames < 5) +
+      row('fps', Math.round(this.fps)) +
+      row('altitude', qualityLabel, quality < 2) +
+      row('sol', solVoiture.toFixed(0) + ' m') +
+      row('voiture / sol', (dVoiture >= 0 ? '+' : '') + dVoiture.toFixed(2) + ' m', dVoiture < -0.5) +
+      row('camera / sol', (dCamera >= 0 ? '+' : '') + dCamera.toFixed(1) + ' m', dCamera < 0.5) +
+      row('roues au sol', vehicle.wheels.filter((w) => w.grounded).length + '/4',
+          vehicle.wheels.filter((w) => w.grounded).length === 0) +
+      row('chunks', terrain.stats.chunks, terrain.stats.chunks === 0) +
+      row('textures', terrain.stats.textured + ' ok / ' + terrain.stats.textureFailed + ' ko',
+          terrain.stats.textureFailed > 0) +
+      row('routes', roads.stats.ways, roads.stats.ways === 0) +
+      row('en attente', pending) +
+      row('echecs reseau', failed, failed > 0) +
+      `<div class="diag-row wide"><span>gpu</span><b>${this.gpu}</b></div>`;
   }
 
   _drawMinimap(vehicle, roads) {

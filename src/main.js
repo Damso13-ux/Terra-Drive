@@ -439,8 +439,11 @@ class Game {
     this.chase.update(this.vehicle, dt);
     this.carView.update(dt);
 
+    this.frames = (this.frames || 0) + 1;
     this.hud.update(dt, {
       vehicle: this.vehicle,
+      camera: this.camera,
+      frames: this.frames,
       roads: this.roads,
       terrain: this.terrain,
       queue: this.queue,

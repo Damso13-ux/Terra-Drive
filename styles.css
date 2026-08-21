@@ -632,3 +632,71 @@ button.primary:disabled {
   /* remplace par l'entree "Sources et credits" du menu */
   #attrib { display: none; }
 }
+
+/* ====================================================================== */
+/* Correctifs telephone reel                                              */
+/* ====================================================================== */
+
+/* Le selecteur en paysage sur telephone : la regle `max-width: 900px` plus haut
+   empilait panneau et carte en colonne, ce qui donnait un panneau etroit deja
+   defile au-dessus d'une bande de carte inutilisable. En paysage on revient a
+   deux colonnes cote a cote, chacune sur toute la hauteur. */
+@media (orientation: landscape) and (pointer: coarse) {
+  #picker { flex-direction: row; }
+  .picker-panel {
+    width: min(370px, 48%);
+    height: 100%;
+    max-height: none;
+    border-right: 1px solid var(--line);
+    padding: 16px 16px calc(8px + env(safe-area-inset-bottom));
+    gap: 12px;
+  }
+  .picker-panel header p { display: none; }
+  .picker-panel h1 { font-size: 18px; margin-bottom: 0; }
+  .picker-presets { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .preset { padding: 8px 10px; }
+  .preset strong { font-size: 12px; }
+  .preset span { font-size: 10px; }
+  .picker-map { flex: 1; height: 100%; min-height: 0; }
+}
+
+/* Les pedales debordaient sous le bord bas de l'ecran : Chrome sur Android
+   renvoie souvent 0 pour safe-area-inset-bottom alors que la barre de gestes
+   occupe bel et bien la place. On garde donc une marge en dur. */
+@media (pointer: coarse) {
+  .tc-pedals {
+    right: calc(20px + env(safe-area-inset-right));
+    bottom: calc(30px + env(safe-area-inset-bottom));
+  }
+  .tc-hand {
+    right: calc(150px + env(safe-area-inset-right));
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    font-size: 19px;
+    font-weight: 700;
+  }
+  /* jamais d'emoji sur les glyphes de l'interface */
+  .tc-btn, .tc-hand {
+    font-family: system-ui, "Segoe UI Symbol", sans-serif;
+    font-variant-emoji: text;
+  }
+}
+
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 480px) {
+  .tc-gas { width: 84px; height: 84px; font-size: 11px; }
+  .tc-brake { width: 70px; height: 70px; font-size: 11px; }
+  .tc-hand {
+    right: calc(122px + env(safe-area-inset-right));
+    bottom: calc(126px + env(safe-area-inset-bottom));
+    width: 48px;
+    height: 48px;
+  }
+}
+
+/* Diagnostic : lisible sur telephone, et il doit pouvoir tout afficher. */
+#hud.compact .diag {
+  min-width: 190px;
+  font-size: 11px;
+  max-width: 62vw;
+}
+.diag-row.wide { display: block; }
+.diag-row.wide b { display: block; font-weight: 400; font-size: 10px; word-break: break-word; }
