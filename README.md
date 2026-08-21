@@ -100,6 +100,29 @@ altimétrique de chaque route est lissé sous contrainte, et le terrain est ensu
 *creusé* pour épouser la chaussée. C'est ce qui fait la différence entre une route en
 tôle ondulée et une route roulable.
 
+## État au 21 août 2026
+
+Jouable de bout en bout. Vérifié en conditions réelles à Aix-en-Provence :
+1 500+ routes chargées, 37 chunks de terrain, 0 échec de requête, la voiture se
+pose et tient sur la chaussée (charge des 4 roues = 13 531 N ≈ poids exact du
+véhicule, adhérence 0,99 sur route primaire).
+
+### Points à surveiller
+
+- **Overpass est le maillon fragile.** `overpass-api.de` limite par adresse IP et
+  peut refuser toute connexion pendant plusieurs minutes si on le sollicite trop.
+  Le repli sur `maps.mail.ru` fonctionne mais coûte ~45 s d'attente (le temps que
+  le timeout du miroir principal expire). Si le démarrage est long, c'est ça.
+- Si tu veux retirer le miroir `maps.mail.ru` (opéré par VK), il suffit de
+  supprimer sa ligne dans `src/world/roads.js` — le jeu continue de fonctionner
+  avec le miroir principal seul.
+- L'exposition a été baissée après un premier rendu entièrement délavé. Mesure
+  actuelle : luminance moyenne 177/255, 0,6 % de pixels saturés. À réajuster
+  visuellement selon les goûts (`toneMappingExposure` dans `src/main.js`).
+- La voiture flue très lentement à l'arrêt en pente (< 1 km/h) : la résistance au
+  roulement s'annule sous 0,5 m/s. Cosmétique, mais à corriger.
+- Pas de collision avec autre chose que le sol : ni bâtiments, ni glissières.
+
 ## Pistes suivantes
 
 - Bâtiments OSM extrudés, végétation, garde-corps
