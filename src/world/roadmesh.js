@@ -7,34 +7,111 @@ import { cellsAround } from './cells.js';
 const LIFT = 0.07; // hauteur du ruban au-dessus du profil, en metres
 const TEX_LENGTH = 14; // longueur couverte par une repetition de la texture, en metres
 
-function asphaltTexture({ marked }) {
-  const W = 128, H = 256;
+/**
+ * Revetement procedural, une texture par famille de route.
+ *
+ * L'axe U traverse la chaussee, l'axe V la parcourt : le marquage se dessine
+ * donc en colonnes, et la texture se repete dans le sens de la marche.
+ */
+const FAMILIES = {
+  autoroute: {
+    base: '#32333a',
+    grain: 22,
+    edges: { at: 0.045, width: 4, alpha: 0.8 },
+    lanes: [0.34, 0.66], // separateurs de voies, discontinus
+    centre: null,
+    ruts: null,
+  },
+  principale: {
+    base: '#3a3a3d',
+    grain: 26,
+    edges: { at: 0.06, width: 3, alpha: 0.72 },
+    lanes: null,
+    centre: { dash: 56, gap: 40, width: 4, alpha: 0.85 },
+    ruts: null,
+  },
+  secondaire: {
+    base: '#403f41',
+    grain: 30,
+    edges: { at: 0.075, width: 2, alpha: 0.42 },
+    lanes: null,
+    centre: { dash: 30, gap: 76, width: 3, alpha: 0.5 },
+    ruts: null,
+  },
+  piste: {
+    base: '#2e2f34',
+    grain: 18,
+    edges: { at: 0.035, width: 6, alpha: 0.95 },
+    lanes: null,
+    centre: null,
+    ruts: null,
+  },
+  terre: {
+    base: '#5b4a35',
+    grain: 44,
+    edges: null,
+    lanes: null,
+    centre: null,
+    ruts: [0.3, 0.7], // deux ornieres creusees par le passage
+  },
+};
+
+function roadTexture(family) {
+  const spec = FAMILIES[family] || FAMILIES.secondaire;
+  const W = 128;
+  const H = 256;
   const canvas = document.createElement('canvas');
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = marked ? '#3a3a3d' : '#4a453c';
+  ctx.fillStyle = spec.base;
   ctx.fillRect(0, 0, W, H);
+
+  // ornieres : deux bandes assombries dans le sens de la marche
+  if (spec.ruts) {
+    for (const u of spec.ruts) {
+      const g = ctx.createLinearGradient((u - 0.11) * W, 0, (u + 0.11) * W, 0);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(0.5, 'rgba(0,0,0,0.30)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect((u - 0.11) * W, 0, 0.22 * W, H);
+    }
+  }
 
   // grain
   const img = ctx.getImageData(0, 0, W, H);
   for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 26;
+    const n = (Math.random() - 0.5) * spec.grain;
     img.data[i] += n;
     img.data[i + 1] += n;
     img.data[i + 2] += n;
   }
   ctx.putImageData(img, 0, 0);
 
-  if (marked) {
-    ctx.fillStyle = 'rgba(232,232,225,0.72)';
-    ctx.fillRect(Math.round(W * 0.055), 0, 3, H); // rive gauche
-    ctx.fillRect(Math.round(W * 0.945) - 3, 0, 3, H); // rive droite
-    // axe discontinu
-    ctx.fillStyle = 'rgba(240,240,232,0.85)';
-    const cx = Math.round(W / 2) - 2;
-    for (let y = 0; y < H; y += 96) ctx.fillRect(cx, y, 4, 56);
+  // rives
+  if (spec.edges) {
+    ctx.fillStyle = `rgba(233,233,226,${spec.edges.alpha})`;
+    ctx.fillRect(Math.round(spec.edges.at * W), 0, spec.edges.width, H);
+    ctx.fillRect(Math.round((1 - spec.edges.at) * W) - spec.edges.width, 0, spec.edges.width, H);
+  }
+
+  // axe discontinu
+  if (spec.centre) {
+    ctx.fillStyle = `rgba(240,240,232,${spec.centre.alpha})`;
+    const x = Math.round(W / 2 - spec.centre.width / 2);
+    const period = spec.centre.dash + spec.centre.gap;
+    for (let y = 0; y < H; y += period) ctx.fillRect(x, y, spec.centre.width, spec.centre.dash);
+  }
+
+  // separateurs de voies
+  if (spec.lanes) {
+    ctx.fillStyle = 'rgba(236,236,228,0.62)';
+    for (const u of spec.lanes) {
+      const x = Math.round(u * W) - 1;
+      for (let y = 0; y < H; y += 96) ctx.fillRect(x, y, 3, 40);
+    }
   }
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -60,10 +137,15 @@ export class RoadMesh {
       polygonOffsetFactor: -3,
       polygonOffsetUnits: -3,
     };
-    this.materials = {
-      marked: new THREE.MeshStandardMaterial({ map: asphaltTexture({ marked: true }), ...common }),
-      plain: new THREE.MeshStandardMaterial({ map: asphaltTexture({ marked: false }), ...common }),
-    };
+    this.materials = {};
+    for (const family of Object.keys(FAMILIES)) {
+      this.materials[family] = new THREE.MeshStandardMaterial({
+        map: roadTexture(family),
+        ...common,
+        // la terre est mate, le bitume neuf accroche un peu la lumiere
+        roughness: family === 'terre' ? 0.98 : 0.86,
+      });
+    }
 
     this.cells = new Map(); // cellKey -> { meshes:{marked,plain}, signature }
     this.stats = { cells: 0, tris: 0 };
@@ -103,12 +185,13 @@ export class RoadMesh {
   }
 
   _build(entry, ways) {
-    const groups = { marked: [], plain: [] };
+    const groups = {};
+    for (const family of Object.keys(FAMILIES)) groups[family] = [];
     for (const way of ways) {
       this.roads.updateProfile(way);
-      groups[way.rank <= 6 ? 'marked' : 'plain'].push(way);
+      (groups[way.family] || groups.secondaire).push(way);
     }
-    for (const kind of ['marked', 'plain']) {
+    for (const kind of Object.keys(FAMILIES)) {
       const list = groups[kind];
       const old = entry.meshes[kind];
       if (!list.length) {

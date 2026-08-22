@@ -35,23 +35,36 @@ const EXCLUDED =
 // Vu de l'interieur d'une voiture, une departementale a 6 m au trace exact donne
 // un ruban sur lequel on ne tient pas : la moindre correction envoie sur le
 // bas-cote. On elargit pour que ce soit jouable.
+// `family` pilote l'aspect (marquage au sol, matiere) et `rough` la rugosite
+// ressentie : quelques centimetres d'irregularite, invisibles a l'oeil mais
+// parfaitement perceptibles au volant. C'est ce qui separe une nationale lisse
+// d'un chemin de terre.
 const ROAD_CLASS = {
-  raceway: { w: 13.0, grip: 1.05, rank: 0 },
-  motorway: { w: 20.0, grip: 1.0, rank: 0 },
-  motorway_link: { w: 10.0, grip: 1.0, rank: 1 },
-  trunk: { w: 16.0, grip: 1.0, rank: 1 },
-  trunk_link: { w: 9.5, grip: 1.0, rank: 2 },
-  primary: { w: 13.5, grip: 0.99, rank: 2 },
-  primary_link: { w: 9.0, grip: 0.99, rank: 3 },
-  secondary: { w: 11.5, grip: 0.98, rank: 3 },
-  secondary_link: { w: 8.5, grip: 0.98, rank: 4 },
-  tertiary: { w: 10.0, grip: 0.97, rank: 4 },
-  tertiary_link: { w: 8.0, grip: 0.97, rank: 5 },
-  unclassified: { w: 8.5, grip: 0.95, rank: 5 },
-  residential: { w: 9.0, grip: 0.95, rank: 5 },
-  living_street: { w: 7.5, grip: 0.94, rank: 6 },
-  service: { w: 6.0, grip: 0.92, rank: 7 },
-  track: { w: 5.0, grip: 0.78, rank: 8 },
+  raceway:        { w: 13.0, grip: 1.05, rank: 0, family: 'piste',      rough: 0.000 },
+  motorway:       { w: 20.0, grip: 1.00, rank: 0, family: 'autoroute',  rough: 0.004 },
+  motorway_link:  { w: 10.0, grip: 1.00, rank: 1, family: 'autoroute',  rough: 0.004 },
+  trunk:          { w: 16.0, grip: 1.00, rank: 1, family: 'autoroute',  rough: 0.006 },
+  trunk_link:     { w: 9.5,  grip: 1.00, rank: 2, family: 'principale', rough: 0.006 },
+  primary:        { w: 13.5, grip: 0.99, rank: 2, family: 'principale', rough: 0.010 },
+  primary_link:   { w: 9.0,  grip: 0.99, rank: 3, family: 'principale', rough: 0.010 },
+  secondary:      { w: 11.5, grip: 0.98, rank: 3, family: 'principale', rough: 0.014 },
+  secondary_link: { w: 8.5,  grip: 0.98, rank: 4, family: 'principale', rough: 0.014 },
+  tertiary:       { w: 10.0, grip: 0.97, rank: 4, family: 'secondaire', rough: 0.020 },
+  tertiary_link:  { w: 8.0,  grip: 0.97, rank: 5, family: 'secondaire', rough: 0.020 },
+  unclassified:   { w: 8.5,  grip: 0.95, rank: 5, family: 'secondaire', rough: 0.026 },
+  residential:    { w: 9.0,  grip: 0.95, rank: 5, family: 'secondaire', rough: 0.022 },
+  living_street:  { w: 7.5,  grip: 0.94, rank: 6, family: 'secondaire', rough: 0.024 },
+  service:        { w: 6.0,  grip: 0.92, rank: 7, family: 'secondaire', rough: 0.030 },
+  track:          { w: 5.0,  grip: 0.78, rank: 8, family: 'terre',      rough: 0.075 },
+};
+
+/** Libelle lisible, affiche au tableau de bord. */
+export const ROAD_LABEL = {
+  autoroute: 'voie rapide',
+  principale: 'route principale',
+  secondaire: 'route secondaire',
+  terre: 'chemin',
+  piste: 'circuit',
 };
 
 const MIN_WIDTH = 6.5; // en dessous, une route n'est plus praticable en jeu
@@ -78,7 +91,9 @@ export class RoadNetwork {
     this.onChange = null;
     /** Les emprises de batiments voyagent dans la meme requete : on les relaie. */
     this.onBuildings = null;
+    this.onVegetation = null;
     this._pendingBuildings = [];
+    this._pendingVegetation = [];
     this.stats = { ways: 0, cells: 0, failed: 0, loading: 0 };
   }
 
@@ -101,7 +116,9 @@ export class RoadNetwork {
    * cache, donc une zone deja visitee ne repart plus du tout sur le reseau.
    */
   async _loadCell(cell) {
-    const cacheKey = 'ov:' + cell.key;
+    // v2 : la requete ramene desormais aussi les surfaces boisees, donc les
+    // entrees de la version precedente sont incompletes.
+    const cacheKey = 'ov2:' + cell.key;
     const cached = await store.get(cacheKey);
     if (cached) {
       this._acceptCell(cell, cached);
@@ -116,6 +133,9 @@ export class RoadNetwork {
       '[out:json][timeout:60];(' +
       'way["highway"]["highway"!~"' + EXCLUDED + '"]["area"!="yes"](' + bbox + ');' +
       'way["building"](' + bbox + ');' +
+      'way["landuse"~"^(forest|orchard|cemetery)$"](' + bbox + ');' +
+      'way["natural"~"^(wood|scrub|heath)$"](' + bbox + ');' +
+      'way["leisure"~"^(park|garden)$"](' + bbox + ');' +
       ');out geom;';
 
     let attempt = 0;
@@ -171,6 +191,13 @@ export class RoadNetwork {
     this._pendingBuildings.length = 0;
   }
 
+  /** Meme mecanique pour les surfaces boisees. */
+  setVegetationSink(fn) {
+    this.onVegetation = fn;
+    for (const p of this._pendingVegetation) fn(p.cell, p.elements);
+    this._pendingVegetation.length = 0;
+  }
+
   /** Repartit les elements d'une cellule entre routes et batiments. */
   _acceptCell(cell, elements) {
     this.cells.set(cell.key, 'ready');
@@ -179,14 +206,20 @@ export class RoadNetwork {
 
     const roads = [];
     const buildings = [];
+    const green = [];
     for (const el of elements) {
       if (!el.tags) continue;
       if (el.tags.highway) roads.push(el);
       else if (el.tags.building) buildings.push(el);
+      else if (el.tags.landuse || el.tags.natural || el.tags.leisure) green.push(el);
     }
     this._ingest(roads);
+
     if (this.onBuildings) this.onBuildings(cell, buildings);
     else this._pendingBuildings.push({ cell, elements: buildings });
+
+    if (this.onVegetation) this.onVegetation(cell, green);
+    else this._pendingVegetation.push({ cell, elements: green });
   }
 
   _ingest(elements) {
@@ -229,8 +262,17 @@ export class RoadNetwork {
     if (tags.oneway === 'yes' && !tags.lanes) width *= 0.78;
     width = Math.max(width, MIN_WIDTH);
 
+    // Le revetement declare l'emporte sur la classe : une departementale en
+    // gravier se conduit comme un chemin, pas comme une nationale.
     let grip = cls.grip;
-    if (tags.surface && LOOSE_SURFACES.has(tags.surface)) grip = Math.min(grip, 0.7);
+    let family = cls.family;
+    let rough = cls.rough;
+    if (tags.surface && LOOSE_SURFACES.has(tags.surface)) {
+      grip = Math.min(grip, 0.72);
+      family = 'terre';
+      rough = Math.max(rough, 0.055);
+    }
+    if (tags.smoothness === 'bad' || tags.smoothness === 'very_bad') rough = Math.max(rough, 0.06);
 
     const raw = [];
     const tmp = [0, 0];
@@ -246,6 +288,9 @@ export class RoadNetwork {
       name: tags.name || null,
       highway: tags.highway,
       rank: cls.rank,
+      family,
+      rough,
+      surface: tags.surface || null,
       bridge: !!tags.bridge && tags.bridge !== 'no',
       tunnel: !!tags.tunnel && tags.tunnel !== 'no',
       halfWidth: width / 2,

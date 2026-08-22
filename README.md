@@ -174,6 +174,40 @@ Deux réponses, complémentaires :
    fait jour, la carte d'environnement est retirée à chaud. Aucune liste de GPU
    fautifs à maintenir : on regarde le résultat, pas le nom du matériel.
 
+### Familles de route
+
+Le type OSM ne sert plus seulement à la largeur : il détermine aussi **l'aspect
+et le ressenti**. Cinq familles, chacune avec son revêtement procédural et sa
+rugosité :
+
+| Famille | Marquage | Rugosité |
+|---|---|---|
+| Voie rapide | rives épaisses + séparateurs de voies | 0,4 cm |
+| Route principale | rives + axe discontinu | 1,0 à 1,4 cm |
+| Route secondaire | rives fines, axe effacé | 2,0 à 3,0 cm |
+| Chemin | aucun, deux ornières creusées | 7,5 cm |
+| Circuit | rives larges, rien d'autre | 0 |
+
+La rugosité est de quelques centimètres : **invisible à l'œil, parfaitement
+perceptible au volant**. C'est ce qui sépare une nationale lisse d'un chemin de
+terre, bien plus que le coefficient d'adhérence.
+
+Le tag `surface` l'emporte sur la classe : une départementale en gravier se
+conduit comme un chemin, pas comme une nationale. Le tableau de bord annonce en
+permanence sur quoi on roule.
+
+### Végétation
+
+Les arbres sont semés dans les surfaces boisées d'OSM (`forest`, `wood`,
+`orchard`, `scrub`, `heath`, `park`, `cemetery`, `garden`), par tirage par rejet
+dans la boîte englobante. Le générateur est amorcé par l'identifiant OSM de la
+surface, donc **la même forêt repousse toujours à l'identique** — sans quoi elle
+se redessinerait à chaque passage.
+
+Tout passe par des maillages instanciés : un seul appel de dessin par cellule,
+quel que soit le nombre d'arbres. La densité est respectée exactement (vérifié :
+3,12 ha à 26 arbres/ha donnent 81 arbres).
+
 ### Ménager Overpass
 
 L'API Overpass publique est un service bénévole, limité par adresse IP. Trois

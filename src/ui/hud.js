@@ -3,6 +3,7 @@
 // pas, on doit le voir, pas le deviner.
 
 import { cellsAround } from '../world/cells.js';
+import { ROAD_LABEL } from '../world/roads.js';
 
 const MINIMAP_RANGE = 280; // metres representes du centre au bord
 
@@ -83,7 +84,7 @@ export class Hud {
   }
 
   update(dt, ctx) {
-    const { vehicle, roads, placeName } = ctx;
+    const { vehicle, roads, placeName, road } = ctx;
     this.fps += (1 / Math.max(dt, 1e-4) - this.fps) * 0.08;
 
     if (this._toastTimer > 0) {
@@ -101,7 +102,15 @@ export class Hud {
     const rev = Math.min(1, vehicle.rpm / vehicle.cfg.redlineRpm);
     this.rpmEl.style.width = (rev * 100).toFixed(1) + '%';
     this.rpmEl.classList.toggle('redline', rev > 0.92);
-    if (placeName !== undefined) this.placeEl.textContent = placeName;
+    // On annonce sur quoi on roule : c'est la lecture la plus utile du monde reel.
+    let where = placeName || '';
+    if (road && road.way) {
+      const w = road.way;
+      const type = ROAD_LABEL[w.family] || w.highway;
+      const label = w.name ? w.name + ' · ' + type : type;
+      where = where ? label + '  —  ' + where : label;
+    }
+    this.placeEl.textContent = where;
 
     if (this.showDiag) this._drawDiag(ctx);
     this._drawMinimap(vehicle, roads);

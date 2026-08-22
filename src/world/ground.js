@@ -4,6 +4,25 @@
 // 0.6 transformait le moindre ecart en piege : on quittait la chaussee et la
 // voiture devenait incontrolable. Le bas-cote doit penaliser, pas punir.
 const OFFROAD_GRIP = 0.8;
+const OFFROAD_ROUGH = 0.09; // hors chaussee, ca secoue
+
+/**
+ * Irregularites de surface, en metres.
+ *
+ * Quelques centimetres suffisent : c'est invisible a l'oeil mais parfaitement
+ * perceptible au volant, et c'est ce qui donne son caractere a un chemin de
+ * terre face a une nationale. Trois sinusoides de periodes premieres entre elles
+ * evitent tout motif regulier reconnaissable.
+ */
+function bumps(x, z, amplitude) {
+  if (amplitude <= 0) return 0;
+  return (
+    amplitude *
+    (Math.sin(x * 0.83 + z * 0.31) * 0.5 +
+      Math.sin(x * 0.19 - z * 1.27) * 0.3 +
+      Math.sin(x * 2.11 + z * 1.77) * 0.2)
+  );
+}
 
 export class Ground {
   constructor(heightfield, roads) {
@@ -16,10 +35,11 @@ export class Ground {
   probe(x, z) {
     const terrain = this.hf.sample(x, z);
     const road = this.roads ? this.roads.queryGround(x, z) : null;
-    if (!road) return { y: terrain, grip: OFFROAD_GRIP, onRoad: 0 };
+    if (!road) return { y: terrain + bumps(x, z, OFFROAD_ROUGH), grip: OFFROAD_GRIP, onRoad: 0 };
     const b = road.blend;
+    const rough = road.way.rough + (1 - b) * OFFROAD_ROUGH;
     return {
-      y: terrain + (road.y - terrain) * b,
+      y: terrain + (road.y - terrain) * b + bumps(x, z, rough),
       grip: OFFROAD_GRIP + (road.grip - OFFROAD_GRIP) * b,
       onRoad: b,
     };

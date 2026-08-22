@@ -9,6 +9,7 @@ import { Ground } from './world/ground.js';
 import { Terrain } from './world/terrain.js';
 import { RoadMesh } from './world/roadmesh.js';
 import { Buildings } from './world/buildings.js';
+import { Vegetation } from './world/vegetation.js';
 import { Atmosphere } from './world/sky.js';
 import { Vehicle } from './vehicle/car.js';
 import { CarView } from './vehicle/carview.js';
@@ -241,9 +242,20 @@ class Game {
       maxPerCell: q.buildingsPerCell,
       minArea: q.buildingMinArea,
     });
-    this.buildings.setEnabled(q.buildings);
+    this.buildings.setEnabled(this.detailEnabled('buildings', q.buildings));
     // Les emprises arrivent dans la meme requete Overpass que les routes.
     this.roads.setBuildingSink((cell, elements) => this.buildings.ingest(cell, elements));
+
+    this.vegetation = new Vegetation({
+      scene: this.scene,
+      proj: this.proj,
+      ground: this.ground,
+      radius: q.buildingRadius,
+      maxPerCell: q.treesPerCell,
+      enabled: q.vegetation,
+    });
+    this.vegetation.setEnabled(this.detailEnabled('vegetation', q.vegetation));
+    this.roads.setVegetationSink((cell, elements) => this.vegetation.ingest(cell, elements));
     this.heightfield.onTile = (tx2, ty2) => this.terrain.markTileDirty(tx2, ty2);
 
     const chosen = findVehicle(prefs.get('vehicle', DEFAULT_VEHICLE));
@@ -265,12 +277,15 @@ class Game {
         this.hud.toast('Qualite : ' + q.resolved);
       },
       onAssists: () => this.actions.assists(),
+      onDetail: (name, on) => this.setDetail(name, on),
       getState: () => ({
         vehicleId: this.vehicleEntry.id,
         preset: this.quality.preset,
         resolved: this.quality.resolved,
         quality: this.quality,
         assists: this.vehicle.assists.abs && this.vehicle.assists.tcs,
+        buildings: this.buildings.enabled,
+        vegetation: this.vegetation.enabled,
       }),
     });
     if (this.device.mobile) this.setupTouch();
@@ -455,6 +470,7 @@ class Game {
     L.push('textures ' + this.terrain.stats.textured + ' ok / ' + this.terrain.stats.textureFailed + ' ko');
     L.push('routes ' + this.roads.stats.ways + ', rubans ' + this.roadMesh.stats.tris + ' tri');
     L.push('batiments ' + this.buildings.stats.count + ' sur ' + this.buildings.stats.cells + ' cellules');
+    L.push('arbres ' + this.vegetation.stats.trees);
     L.push('cache overpass ' + store.hits + ' repris / ' + store.misses + ' manques');
     L.push('altitude ' + ['ABSENTE', 'approchee', 'fine'][this.heightfield.lastQuality]);
     L.push('sol ' + this.ground.height(v.position.x, v.position.z).toFixed(0) + ' m');
@@ -525,9 +541,29 @@ class Game {
     return entry;
   }
 
+  /**
+   * Un reglage de detail peut valoir 'auto' (suivre le preset), '1' ou '0'.
+   * Choisir un preset efface les reglages manuels : c'est ce qu'on attend d'un
+   * preset, et cela evite qu'un vieux choix oublie contredise silencieusement
+   * le niveau demande.
+   */
+  detailEnabled(name, fromPreset) {
+    const v = prefs.get('detail:' + name, 'auto');
+    return v === 'auto' ? fromPreset : v === '1';
+  }
+
+  setDetail(name, on) {
+    prefs.set('detail:' + name, on ? '1' : '0');
+    this.applyQuality(this.quality.preset, false);
+  }
+
   /** Applique un preset de qualite a chaud, sans recharger la page. */
-  applyQuality(preset) {
+  applyQuality(preset, clearDetails = true) {
     prefs.set('quality', preset);
+    if (clearDetails) {
+      prefs.set('detail:buildings', 'auto');
+      prefs.set('detail:vegetation', 'auto');
+    }
     const q = (this.quality = qualityProfile(this.device, preset));
 
     this.renderer.setPixelRatio(q.pixelRatio);
@@ -547,7 +583,9 @@ class Game {
 
     this.roadMesh.radius = q.roadRadius;
     this.buildings.radius = q.buildingRadius;
-    this.buildings.setEnabled(q.buildings);
+    this.buildings.setEnabled(this.detailEnabled('buildings', q.buildings));
+    this.vegetation.radius = q.buildingRadius;
+    this.vegetation.setEnabled(this.detailEnabled('vegetation', q.vegetation));
     this.vehicle.substep = q.substep;
 
     // Basculer les ombres change le programme des shaders : il faut le signaler.
@@ -682,6 +720,7 @@ class Game {
     this.roads.ensureArea(p.x, p.z, this.device.mobile ? 1500 : ROAD_RADIUS);
     this.roadMesh.update(p.x, p.z);
     this.buildings.update(p.x, p.z);
+    this.vegetation.update(p.x, p.z);
     this.atmosphere.update(p, dt);
     this.chase.update(this.vehicle, dt);
     this.carView.update(dt);
@@ -691,6 +730,7 @@ class Game {
       vehicle: this.vehicle,
       camera: this.camera,
       frames: this.frames,
+      road: this.roads.queryGround(p.x, p.z),
       renderedGround: this.renderedGround,
       textureAverage: this.textureAverage,
       atmosphere: this.atmosphere,

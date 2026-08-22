@@ -14,11 +14,12 @@ const STAT_LABELS = {
 };
 
 export class Settings {
-  constructor(root, { onVehicle, onQuality, onAssists, getState }) {
+  constructor(root, { onVehicle, onQuality, onAssists, onDetail, getState }) {
     this.root = root;
     this.onVehicle = onVehicle;
     this.onQuality = onQuality;
     this.onAssists = onAssists;
+    this.onDetail = onDetail;
     this.getState = getState;
 
     root.innerHTML = `
@@ -38,6 +39,20 @@ export class Settings {
             <h3>Qualite graphique</h3>
             <div class="preset-row" data-presets></div>
             <p class="settings-note" data-quality-note></p>
+
+            <div class="detail-row">
+              <button class="toggle" data-detail="buildings">
+                <span>Batiments</span><b data-detail-buildings>—</b>
+              </button>
+              <button class="toggle" data-detail="vegetation">
+                <span>Vegetation</span><b data-detail-vegetation>—</b>
+              </button>
+            </div>
+            <p class="settings-note">
+              Ce sont les deux postes les plus lourds, et ceux qui changent le plus
+              l'image. Les regler a la main remplace le choix du preset ; en
+              reselectionner un remet tout d'aplomb.
+            </p>
           </section>
 
           <section>
@@ -69,6 +84,13 @@ export class Settings {
       this.onAssists();
       this.refresh();
     });
+    for (const btn of root.querySelectorAll('[data-detail]')) {
+      btn.addEventListener('click', () => {
+        const name = btn.dataset.detail;
+        this.onDetail(name, !this.getState()[name]);
+        this.refresh();
+      });
+    }
   }
 
   _buildVehicles() {
@@ -123,12 +145,19 @@ export class Settings {
     for (const el of this.presetsEl.children) {
       el.classList.toggle('active', el.dataset.preset === s.preset);
     }
-    this.noteEl.textContent =
-      s.preset === 'auto'
-        ? `Automatique : « ${labelOf(s.resolved)} » a ete retenu pour cet appareil.`
-        : detailOf(s.quality);
+    // Toujours annoncer les consequences concretes : c'est ce qui donne du poids
+    // au choix, bien plus qu'un simple nom de niveau.
+    const prefix =
+      s.preset === 'auto' ? `« ${labelOf(s.resolved)} » retenu pour cet appareil — ` : '';
+    this.noteEl.textContent = prefix + detailOf(s.quality);
     this.assistsStateEl.textContent = s.assists ? 'activees' : 'desactivees';
     this.assistsStateEl.classList.toggle('off', !s.assists);
+
+    for (const name of ['buildings', 'vegetation']) {
+      const el = this.root.querySelector('[data-detail-' + name + ']');
+      el.textContent = s[name] ? 'affiches' : 'masques';
+      el.classList.toggle('off', !s[name]);
+    }
   }
 
   get isOpen() {
@@ -151,10 +180,11 @@ const labelOf = (id) => (PRESETS.find((p) => p.id === id) || {}).name || id;
 
 function detailOf(q) {
   const bits = [
-    `portee ${(q.terrainRadius * 0.89).toFixed(1)} km`,
-    q.buildings ? 'batiments' : 'sans batiments',
+    `portee ${(q.terrainRadius * 1.49).toFixed(1)} km`,
+    `imagerie ${(3.4 / Math.pow(2, q.imageryBoost)).toFixed(1)} m/pixel`,
     q.shadows ? 'ombres' : 'sans ombres',
     `resolution x${q.pixelRatio.toFixed(2)}`,
+    `physique ${Math.round(1 / q.substep)} Hz`,
   ];
   return bits.join(' · ');
 }

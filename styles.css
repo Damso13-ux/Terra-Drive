@@ -943,3 +943,15 @@ button.primary:disabled {
 @media (orientation: portrait) and (pointer: coarse) {
   .vehicle-grid { grid-template-columns: 1fr; }
 }
+
+/* Bascules de detail : deux reglages cote a cote sous les presets. */
+.detail-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 9px;
+}
+.detail-row .toggle { padding: 11px 13px; font-size: 13px; }
+@media (orientation: portrait) and (pointer: coarse) {
+  .detail-row { grid-template-columns: 1fr; }
+}
