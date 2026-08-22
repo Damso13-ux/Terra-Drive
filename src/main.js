@@ -659,6 +659,7 @@ class Game {
       const input = this.input.update(dt);
       this.vehicle.setInput(input);
       this.vehicle.update(dt);
+      this._resolveBuildings();
     }
 
     this.rescueSpawn(dt);
@@ -709,6 +710,37 @@ class Game {
         if (chunk) this.textureAverage = averageColour(chunk.texture.image);
       }
       this._checkLighting();
+    }
+  }
+
+  /**
+   * Empeche la voiture d'entrer dans un batiment.
+   *
+   * Correction de position plutot que vraie collision de corps rigide : c'est
+   * inconditionnellement stable et cela suffit pour des obstacles statiques. Sans
+   * elle on traverse les facades, et a Monaco on passe son temps dans les murs,
+   * camera comprise.
+   */
+  _resolveBuildings() {
+    const v = this.vehicle;
+    const push = this.buildings.resolve(
+      v.position.x,
+      v.position.z,
+      v.cfg.bodyWidth * 0.5 + 0.15
+    );
+    if (!push) return;
+
+    v.position.x += push.x;
+    v.position.z += push.z;
+
+    const len = Math.hypot(push.x, push.z) || 1;
+    const nx = push.x / len;
+    const nz = push.z / len;
+    const into = v.velocity.x * nx + v.velocity.z * nz;
+    if (into < 0) {
+      // on annule la composante qui rentrait dans le mur, plus un rebond discret
+      v.velocity.x -= into * nx * 1.15;
+      v.velocity.z -= into * nz * 1.15;
     }
   }
 

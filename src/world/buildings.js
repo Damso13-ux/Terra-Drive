@@ -20,17 +20,18 @@ const LEVEL_HEIGHT = 3.1; // hauteur d'un etage, en metres
 const DEFAULT_LEVELS = 2;
 const MAX_PER_CELL = 1400; // au-dela, une cellule dense coute plus qu'elle n'apporte
 const MIN_AREA = 12; // m2 : sous ce seuil c'est un abri de jardin, on passe
+const HIT_GRID = 32; // maille de la grille de collision, en metres
 
 // Teintes de facade, tirees au sort de facon deterministe par batiment.
 // Teintes volontairement sombres : l'eclairage indirect est fort (surtout sans
 // carte d'environnement), et des facades claires ressortent completement brulees.
 const WALL_TINTS = [
-  [0.40, 0.37, 0.33], [0.35, 0.33, 0.30], [0.44, 0.41, 0.35],
-  [0.31, 0.30, 0.28], [0.42, 0.38, 0.32], [0.37, 0.36, 0.35],
+  [0.25, 0.23, 0.20], [0.21, 0.20, 0.18], [0.28, 0.26, 0.22],
+  [0.18, 0.18, 0.17], [0.27, 0.24, 0.19], [0.23, 0.22, 0.21],
 ];
 const ROOF_TINTS = [
-  [0.26, 0.16, 0.13], [0.22, 0.15, 0.12], [0.19, 0.19, 0.21],
-  [0.29, 0.18, 0.13], [0.17, 0.17, 0.19],
+  [0.16, 0.10, 0.08], [0.13, 0.09, 0.07], [0.12, 0.12, 0.13],
+  [0.18, 0.11, 0.08], [0.10, 0.10, 0.12],
 ];
 
 export class Buildings {
@@ -57,6 +58,7 @@ export class Buildings {
     this.cells = new Map(); // "cx,cz" -> 'loading' | 'ready' | 'failed'
     this.shapes = new Map(); // "cx,cz" -> [shape]
     this.meshes = new Map(); // "cx,cz" -> Mesh
+    this.grid = new Map(); // "gx,gz" -> [emprise] pour la collision
     this.stats = { cells: 0, count: 0, failed: 0 };
   }
 
@@ -111,8 +113,10 @@ export class Buildings {
       .then((json) => {
         this.cells.set(key, 'ready');
         this.stats.cells++;
-        this.shapes.set(key, this._parse(json.elements || []));
-        this.stats.count += this.shapes.get(key).length;
+        const parsed = this._parse(json.elements || []);
+        this.shapes.set(key, parsed);
+        for (const b of parsed) this._index(b);
+        this.stats.count += parsed.length;
       })
       .catch(() => {
         this.cells.set(key, 'failed');
@@ -143,6 +147,71 @@ export class Buildings {
       out.push({ id: el.id, pts, height: heightOf(el.tags || {}) });
     }
     return out;
+  }
+
+  /** Range une emprise dans la grille de collision. */
+  _index(b) {
+    let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+    for (const p of b.pts) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minZ) minZ = p.y;
+      if (p.y > maxZ) maxZ = p.y;
+    }
+    b.bbox = { minX, minZ, maxX, maxZ };
+    for (let gz = Math.floor(minZ / HIT_GRID); gz <= Math.floor(maxZ / HIT_GRID); gz++) {
+      for (let gx = Math.floor(minX / HIT_GRID); gx <= Math.floor(maxX / HIT_GRID); gx++) {
+        const k = gx + ',' + gz;
+        let list = this.grid.get(k);
+        if (!list) this.grid.set(k, (list = []));
+        list.push(b);
+      }
+    }
+  }
+
+  /**
+   * Repousse un point hors des batiments.
+   *
+   * Une vraie collision de corps rigide contre des polygones serait disproportionnee
+   * ici : une correction de position suffit, et elle est inconditionnellement stable.
+   * Sans elle, on traverse les facades — et a Monaco on passe son temps dans les murs,
+   * camera comprise.
+   *
+   * @returns {{x:number, z:number}|null} le deplacement a appliquer
+   */
+  resolve(x, z, radius) {
+    if (!this.enabled) return null;
+    const gx = Math.floor(x / HIT_GRID);
+    const gz = Math.floor(z / HIT_GRID);
+    let best = null;
+    let bestPush = 0;
+
+    for (let cz = gz - 1; cz <= gz + 1; cz++) {
+      for (let cx = gx - 1; cx <= gx + 1; cx++) {
+        const list = this.grid.get(cx + ',' + cz);
+        if (!list) continue;
+        for (const b of list) {
+          const bb = b.bbox;
+          if (x < bb.minX - radius || x > bb.maxX + radius) continue;
+          if (z < bb.minZ - radius || z > bb.maxZ + radius) continue;
+
+          const hit = closestOnPolygon(b.pts, x, z);
+          const push = hit.inside ? hit.dist + radius : radius - hit.dist;
+          // seuil : pile a la distance de contact, l'arrondi flottant produirait
+          // une micro-poussee a chaque image, donc un tremblement
+          if (push <= 0.002 || push <= bestPush) continue;
+          bestPush = push;
+          // Le vecteur bord -> point vise vers l'interieur quand on est dedans,
+          // vers l'exterieur quand on est dehors : d'ou l'inversion.
+          const sign = hit.inside ? -1 : 1;
+          const dx = x - hit.px;
+          const dz = z - hit.pz;
+          const len = Math.hypot(dx, dz) || 1;
+          best = { x: (dx / len) * push * sign, z: (dz / len) * push * sign };
+        }
+      }
+    }
+    return best;
   }
 
   /** Construit et libere les maillages selon la position du joueur. */
@@ -286,4 +355,32 @@ function addBuilding(b, ground, positions, normals, colors) {
 
 function pushVertex(arr, a, b, c) {
   arr.push(a, b, c);
+}
+
+/** Point du contour le plus proche, et appartenance au polygone. */
+function closestOnPolygon(pts, x, z) {
+  const n = pts.length;
+  let px = 0, pz = 0, best = Infinity;
+  let inside = false;
+
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const ax = pts[i].x, az = pts[i].y;
+    const bx = pts[j].x, bz = pts[j].y;
+
+    // lancer de rayon horizontal pour l'appartenance
+    if ((az > z) !== (bz > z) && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+
+    const dx = bx - ax, dz = bz - az;
+    const len2 = dx * dx + dz * dz;
+    let t = len2 > 1e-9 ? ((x - ax) * dx + (z - az) * dz) / len2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const qx = ax + dx * t, qz = az + dz * t;
+    const d = (x - qx) * (x - qx) + (z - qz) * (z - qz);
+    if (d < best) {
+      best = d;
+      px = qx;
+      pz = qz;
+    }
+  }
+  return { px, pz, dist: Math.sqrt(best), inside };
 }

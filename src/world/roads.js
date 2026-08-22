@@ -256,16 +256,27 @@ export class RoadNetwork {
     }
     const y = way.y;
     y.set(base);
-    const passes = way.bridge ? 26 : 12;
-    const maxDev = way.bridge ? 12 : 2.2;
+
+    // Un viaduc a le droit de s'ecarter du terrain, un tunnel doit le suivre au
+    // plus pres (sinon il emerge en pleine colline), une route ordinaire est
+    // entre les deux. 12 m pour un pont etait bien trop : a Monaco, la route
+    // suivante repartant au niveau du sol, cela fabriquait un tremplin.
+    const passes = way.bridge ? 22 : 12;
+    const maxDev = way.bridge ? 5.5 : way.tunnel ? 0.8 : 2.2;
+
     for (let p = 0; p < passes; p++) {
       let prev = y[0];
       for (let i = 1; i < n - 1; i++) {
         const cur = y[i];
         let v = cur + ((prev + y[i + 1]) * 0.5 - cur) * 0.55;
+        // L'ecart autorise se referme aux deux bouts : une route se raccorde
+        // toujours a une autre, et doit donc finir exactement sur le terrain.
+        const edge = Math.min(i, n - 1 - i);
+        const taper = Math.min(1, edge / Math.max(4, Math.min(12, (n - 1) * 0.25)));
+        const allowed = maxDev * taper;
         const d = v - base[i];
-        if (d > maxDev) v = base[i] + maxDev;
-        else if (d < -maxDev) v = base[i] - maxDev;
+        if (d > allowed) v = base[i] + allowed;
+        else if (d < -allowed) v = base[i] - allowed;
         prev = cur;
         y[i] = v;
       }
