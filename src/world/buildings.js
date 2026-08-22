@@ -63,6 +63,19 @@ export class Buildings {
     this.group.visible = on;
   }
 
+  /** Oublie tout : appele avant un rejeu, quand les seuils ont change. */
+  reset() {
+    for (const mesh of this.meshes.values()) {
+      this.group.remove(mesh);
+      mesh.geometry.dispose();
+    }
+    this.meshes.clear();
+    this.cells.clear();
+    this.shapes.clear();
+    this.grid.clear();
+    this.stats = { cells: 0, count: 0, failed: 0 };
+  }
+
   /**
    * Recoit les emprises d'une cellule. Elles arrivent desormais dans la meme
    * requete Overpass que les routes : ce module n'interroge plus le reseau.

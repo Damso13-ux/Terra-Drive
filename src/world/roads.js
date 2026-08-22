@@ -103,6 +103,47 @@ export class RoadNetwork {
     this.stats = { ways: 0, cells: 0, failed: 0, loading: 0 };
   }
 
+  /**
+   * Cle de cache d'une cellule.
+   *
+   * Le prefixe distingue les deux origines : leurs elements n'ont pas le meme
+   * niveau de detail, il ne faut surtout pas les melanger. Il porte aussi un
+   * numero de version, a incrementer des que la requete ou la traduction
+   * changent — sans quoi une correction reste sans effet sur toute zone deja
+   * visitee, et le bug survit au correctif.
+   */
+  cacheKey(key) {
+    return (TILES_URL ? 'vt2:' : 'ov2:') + key;
+  }
+
+  /**
+   * Redistribue batiments et surfaces boisees des cellules deja chargees.
+   *
+   * Necessaire au changement de niveau de detail : ces elements sont filtres au
+   * moment de l'analyse (densite, surface minimale), donc un nouveau reglage
+   * resterait sans effet sur tout ce qui est deja en place. Les elements bruts
+   * dorment dans le cache : il suffit de les relire.
+   */
+  async replayDetail() {
+    for (const [key, state] of this.cells) {
+      if (state !== 'ready') continue;
+      const elements = await store.get(this.cacheKey(key));
+      if (!elements) continue;
+
+      const parts = key.split(',');
+      const cell = { key, cx: Number(parts[0]), cz: Number(parts[1]) };
+      const buildings = [];
+      const green = [];
+      for (const el of elements) {
+        if (!el.tags || el.tags.highway) continue;
+        if (el.tags.building) buildings.push(el);
+        else if (el.tags.landuse || el.tags.natural || el.tags.leisure) green.push(el);
+      }
+      if (this.onBuildings) this.onBuildings(cell, buildings);
+      if (this.onVegetation) this.onVegetation(cell, green);
+    }
+  }
+
   /** Demande le chargement des cellules couvrant un disque autour du joueur. */
   ensureArea(worldX, worldZ, radius) {
     const inCells = Math.max(1, Math.ceil(radius / cellSizeMetres(this.proj)));
@@ -122,9 +163,7 @@ export class RoadNetwork {
    * cache, donc une zone deja visitee ne repart plus du tout sur le reseau.
    */
   async _loadCell(cell) {
-    // Le prefixe distingue les deux origines : leurs elements n'ont pas le meme
-    // niveau de detail, il ne faut surtout pas les melanger dans le cache.
-    const cacheKey = (TILES_URL ? 'vt1:' : 'ov2:') + cell.key;
+    const cacheKey = this.cacheKey(cell.key);
     const cached = await store.get(cacheKey);
     if (cached) {
       this._acceptCell(cell, cached);

@@ -278,6 +278,7 @@ class Game {
       },
       onAssists: () => this.actions.assists(),
       onDetail: (name, on) => this.setDetail(name, on),
+      onTiles: (url) => this.setTilesUrl(url),
       getState: () => ({
         vehicleId: this.vehicleEntry.id,
         preset: this.quality.preset,
@@ -286,6 +287,8 @@ class Game {
         assists: this.vehicle.assists.abs && this.vehicle.assists.tcs,
         buildings: this.buildings.enabled,
         vegetation: this.vegetation.enabled,
+        tilesUrl: prefs.get('tilesUrl', ''),
+        source: this.roads.source,
       }),
     });
     if (this.device.mobile) this.setupTouch();
@@ -558,6 +561,18 @@ class Game {
     this.applyQuality(this.quality.preset, false);
   }
 
+  /**
+   * Change la source de donnees. Un rechargement est necessaire : des cellules
+   * sont deja chargees, et les deux origines n'ont pas le meme niveau de detail.
+   * La position est memorisee, donc on reprend exactement au meme endroit.
+   */
+  setTilesUrl(url) {
+    prefs.set('tilesUrl', url);
+    this.remember();
+    this.hud.toast(url ? 'Tuiles vectorielles — rechargement' : 'Retour a Overpass — rechargement');
+    setTimeout(() => location.reload(), 600);
+  }
+
   /** Applique un preset de qualite a chaud, sans recharger la page. */
   applyQuality(preset, clearDetails = true) {
     prefs.set('quality', preset);
@@ -583,10 +598,28 @@ class Game {
     this.terrain.refreshTextures();
 
     this.roadMesh.radius = q.roadRadius;
+    // Les seuils servent au moment de l'analyse : les changer ne suffit pas, il
+    // faut aussi rejouer les cellules deja en place, sinon le nouveau reglage
+    // ne s'applique qu'aux zones pas encore visitees.
+    const detailChanged =
+      this.buildings.maxPerCell !== q.buildingsPerCell ||
+      this.buildings.minArea !== q.buildingMinArea ||
+      this.vegetation.maxPerCell !== q.treesPerCell;
+
     this.buildings.radius = q.buildingRadius;
+    this.buildings.maxPerCell = q.buildingsPerCell;
+    this.buildings.minArea = q.buildingMinArea;
     this.buildings.setEnabled(this.detailEnabled('buildings', q.buildings));
+
     this.vegetation.radius = q.buildingRadius;
+    this.vegetation.maxPerCell = q.treesPerCell;
     this.vegetation.setEnabled(this.detailEnabled('vegetation', q.vegetation));
+
+    if (detailChanged) {
+      this.buildings.reset();
+      this.vegetation.reset();
+      this.roads.replayDetail();
+    }
     this.vehicle.substep = q.substep;
 
     // Basculer les ombres change le programme des shaders : il faut le signaler.

@@ -151,12 +151,17 @@ function mix(id, x, y) {
  */
 export const LAYERS = {
   roads: (p) => {
-    if (!p.kind) return null;
-    const tags = { highway: p.kind };
+    // Piege du schema : `kind` n'est qu'une categorie grossiere (highway,
+    // major_road, minor_road, path) tandis que `kind_detail` porte la valeur
+    // OSM exacte — motorway, residential, track. C'est celle-la qu'il nous faut.
+    const kind = p.kind_detail || p.kind;
+    if (!kind) return null;
+    const tags = { highway: kind };
     if (p.name) tags.name = p.name;
+    if (p.ref) tags.ref = p.ref;
+    if (p.oneway) tags.oneway = p.oneway;
     if (p.is_bridge) tags.bridge = 'yes';
     if (p.is_tunnel) tags.tunnel = 'yes';
-    if (p.ref) tags.ref = p.ref;
     return tags;
   },
 
@@ -167,6 +172,7 @@ export const LAYERS = {
     return tags;
   },
 
+  // Les surfaces boisees vivent dans `landuse`, avec la valeur OSM dans `kind`.
   landuse: (p) => (p.kind ? { landuse: p.kind } : null),
   natural: (p) => (p.kind ? { natural: p.kind } : null),
 };

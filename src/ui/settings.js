@@ -14,12 +14,13 @@ const STAT_LABELS = {
 };
 
 export class Settings {
-  constructor(root, { onVehicle, onQuality, onAssists, onDetail, getState }) {
+  constructor(root, { onVehicle, onQuality, onAssists, onDetail, onTiles, getState }) {
     this.root = root;
     this.onVehicle = onVehicle;
     this.onQuality = onQuality;
     this.onAssists = onAssists;
     this.onDetail = onDetail;
+    this.onTiles = onTiles;
     this.getState = getState;
 
     root.innerHTML = `
@@ -56,6 +57,21 @@ export class Settings {
           </section>
 
           <section>
+            <h3>Source des donnees</h3>
+            <div class="tiles-row">
+              <input type="url" data-tiles placeholder="https://…/france.pmtiles" spellcheck="false">
+              <button data-tiles-save>Appliquer</button>
+            </div>
+            <p class="settings-note">
+              Vide, le jeu utilise l'API Overpass : rien a configurer, mais c'est un
+              service benevole limite par adresse IP, et il devient le goulot des
+              qu'on explore. Coller l'adresse d'une archive PMTiles la remplace :
+              meme donnee, servie par un CDN, sans quota. Source active&nbsp;:
+              <b data-tiles-state>—</b>.
+            </p>
+          </section>
+
+          <section>
             <h3>Aides a la conduite</h3>
             <button class="toggle" data-assists>
               <span>ABS et antipatinage</span><b data-assists-state>—</b>
@@ -73,6 +89,8 @@ export class Settings {
     this.presetsEl = root.querySelector('[data-presets]');
     this.noteEl = root.querySelector('[data-quality-note]');
     this.assistsStateEl = root.querySelector('[data-assists-state]');
+    this.tilesInput = root.querySelector('[data-tiles]');
+    this.tilesStateEl = root.querySelector('[data-tiles-state]');
 
     this._buildVehicles();
     this._buildPresets();
@@ -83,6 +101,12 @@ export class Settings {
     root.querySelector('[data-assists]').addEventListener('click', () => {
       this.onAssists();
       this.refresh();
+    });
+    root.querySelector('[data-tiles-save]').addEventListener('click', () => {
+      this.onTiles(this.tilesInput.value.trim());
+    });
+    this.tilesInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.onTiles(this.tilesInput.value.trim());
     });
     for (const btn of root.querySelectorAll('[data-detail]')) {
       btn.addEventListener('click', () => {
@@ -152,6 +176,9 @@ export class Settings {
     this.noteEl.textContent = prefix + detailOf(s.quality);
     this.assistsStateEl.textContent = s.assists ? 'activees' : 'desactivees';
     this.assistsStateEl.classList.toggle('off', !s.assists);
+
+    if (document.activeElement !== this.tilesInput) this.tilesInput.value = s.tilesUrl || '';
+    this.tilesStateEl.textContent = s.source;
 
     for (const name of ['buildings', 'vegetation']) {
       const el = this.root.querySelector('[data-detail-' + name + ']');

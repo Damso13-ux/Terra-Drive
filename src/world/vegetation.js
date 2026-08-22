@@ -54,6 +54,17 @@ export class Vegetation {
     this.group.visible = on;
   }
 
+  /** Oublie tout : appele avant un rejeu, quand les densites ont change. */
+  reset() {
+    for (const mesh of this.meshes.values()) {
+      this.group.remove(mesh);
+      mesh.dispose();
+    }
+    this.meshes.clear();
+    this.cells.clear();
+    this.stats = { cells: 0, trees: 0 };
+  }
+
   /** Recoit les surfaces boisees d'une cellule, extraites de la meme requete. */
   ingest(cell, elements) {
     if (this.cells.has(cell.key)) return;

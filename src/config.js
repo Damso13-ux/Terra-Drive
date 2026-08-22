@@ -8,17 +8,32 @@
  * IP. Renseigner une URL bascule sur les tuiles vectorielles, sans quota et bien
  * plus rapides.
  *
+ * En pratique, il n'y a pas besoin d'editer ce fichier : l'adresse se colle
+ * dans le panneau de reglages du jeu, section « Source des donnees ». La valeur
+ * ci-dessous ne sert que de defaut, utile pour figer une adresse a la
+ * publication.
+ *
  * L'hebergement doit accepter les requetes de plage (`Range`) et autoriser le
  * CORS : un bucket Cloudflare R2 avec domaine public convient, et son offre
  * gratuite (10 Go, sortie non facturee) couvre tres largement ce besoin.
- *
- * Voir la section « Tuiles vectorielles » du README pour la marche a suivre.
  */
-export const TILES_URL = '';
+const DEFAULT_TILES_URL = '';
+
+/** Adresse saisie dans les reglages, prioritaire sur le defaut. */
+function storedTilesUrl() {
+  try {
+    return localStorage.getItem('terra:tilesUrl') || '';
+  } catch {
+    return ''; // navigation privee : on retombe sur le defaut
+  }
+}
+
+export const TILES_URL = storedTilesUrl() || DEFAULT_TILES_URL;
 
 /**
  * Zoom des tuiles interrogees. 14 est le meilleur compromis pour ce jeu : la
- * geometrie des routes y est deja precise au metre, et une tuile couvre environ
- * 2,4 km, soit a peu pres une de nos cellules.
+ * geometrie y est deja precise a moins d'un metre, une tuile couvre environ
+ * 2,4 km — soit a peu pres une de nos cellules — et l'archive pese deux fois
+ * moins qu'en zoom 15.
  */
 export const TILES_ZOOM = 14;

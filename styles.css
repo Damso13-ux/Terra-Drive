@@ -955,3 +955,20 @@ button.primary:disabled {
 @media (orientation: portrait) and (pointer: coarse) {
   .detail-row { grid-template-columns: 1fr; }
 }
+
+/* Saisie de l'adresse des tuiles. */
+.tiles-row { display: flex; gap: 8px; }
+.tiles-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: #10151b;
+  color: var(--text);
+  font-size: 12.5px;
+  font-family: ui-monospace, Consolas, monospace;
+  outline: none;
+}
+.tiles-row input:focus { border-color: rgba(142, 240, 74, 0.5); }
+.settings-note b { color: var(--text); font-weight: 600; }
