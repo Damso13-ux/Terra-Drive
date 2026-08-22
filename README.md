@@ -174,6 +174,26 @@ Deux réponses, complémentaires :
    fait jour, la carte d'environnement est retirée à chaud. Aucune liste de GPU
    fautifs à maintenir : on regarde le résultat, pas le nom du matériel.
 
+### Ménager Overpass
+
+L'API Overpass publique est un service bénévole, limité par adresse IP. Trois
+mesures, dans l'ordre où elles comptent :
+
+1. **Cache persistant (IndexedDB).** Une zone déjà visitée ne repart plus du tout
+   sur le réseau. C'est de loin le plus gros gain : le développement seul avait
+   fait des centaines de rechargements redemandant exactement les mêmes données.
+2. **Une seule requête par cellule** pour les routes *et* les bâtiments, au lieu
+   de deux. Les emprises voyagent avec les tracés et sont réparties à l'arrivée.
+3. **Grille ancrée sur le monde.** Les cellules étaient découpées en mètres
+   depuis le point de départ : deux départs distants de 300 m dans la même ville
+   ne partageaient plus aucune cellule, ce qui rendait tout cache inutile. Le
+   découpage se fait désormais en coordonnées Web-Mercator absolues, donc une
+   cellule a la même identité pour tout le monde et à tout moment.
+
+Si le projet devait accueillir du monde, l'étape suivante serait de sortir
+Overpass du chemin critique au profit de **tuiles vectorielles** (Protomaps en
+`.pmtiles` se sert depuis un hébergement statique, sans clé ni serveur).
+
 ### Adaptation mobile
 
 Un seul endroit arbitre qualité et fluidité : `qualityProfile()` dans

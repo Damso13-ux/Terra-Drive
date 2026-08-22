@@ -20,6 +20,7 @@ import { TouchControls } from './ui/touch.js';
 import { Settings } from './ui/settings.js';
 import { detectDevice, qualityProfile } from './core/device.js';
 import { findVehicle, DEFAULT_VEHICLE } from './vehicle/catalogue.js';
+import { store } from './core/store.js';
 
 const ROAD_RADIUS = 2600; // rayon de chargement du reseau routier, en metres (bureau)
 const SPAWN_SEARCH = 350; // distance max pour trouver une route au point de depart
@@ -150,7 +151,7 @@ class Game {
       antialias: q.antialias,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(this.device.pixelRatio);
+    this.renderer.setPixelRatio(q.pixelRatio);
     this.renderer.shadowMap.enabled = q.shadows;
     this.renderer.shadowMap.type = q.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -236,10 +237,13 @@ class Game {
       scene: this.scene,
       proj: this.proj,
       ground: this.ground,
-      queue: this.roadQueue,
       radius: q.buildingRadius,
+      maxPerCell: q.buildingsPerCell,
+      minArea: q.buildingMinArea,
     });
     this.buildings.setEnabled(q.buildings);
+    // Les emprises arrivent dans la meme requete Overpass que les routes.
+    this.roads.setBuildingSink((cell, elements) => this.buildings.ingest(cell, elements));
     this.heightfield.onTile = (tx2, ty2) => this.terrain.markTileDirty(tx2, ty2);
 
     const chosen = findVehicle(prefs.get('vehicle', DEFAULT_VEHICLE));
@@ -436,7 +440,7 @@ class Game {
 
     L.push('— APPAREIL —');
     L.push('mobile ' + this.device.mobile + ', coeurs ' + this.device.cores);
-    L.push('pixelRatio ' + this.device.pixelRatio + ' (ecran ' + devicePixelRatio + ')');
+    L.push('pixelRatio ' + q.pixelRatio + ' (ecran ' + devicePixelRatio + ')');
     L.push('ecran ' + innerWidth + 'x' + innerHeight);
     try {
       const ext = gl.getExtension('WEBGL_debug_renderer_info');
@@ -450,6 +454,8 @@ class Game {
     L.push('chunks ' + this.terrain.stats.chunks + ', maillage anneau0 ' + this.terrain._lodFor(0));
     L.push('textures ' + this.terrain.stats.textured + ' ok / ' + this.terrain.stats.textureFailed + ' ko');
     L.push('routes ' + this.roads.stats.ways + ', rubans ' + this.roadMesh.stats.tris + ' tri');
+    L.push('batiments ' + this.buildings.stats.count + ' sur ' + this.buildings.stats.cells + ' cellules');
+    L.push('cache overpass ' + store.hits + ' repris / ' + store.misses + ' manques');
     L.push('altitude ' + ['ABSENTE', 'approchee', 'fine'][this.heightfield.lastQuality]);
     L.push('sol ' + this.ground.height(v.position.x, v.position.z).toFixed(0) + ' m');
     L.push('voiture/sol ' + (v.position.y - this.ground.height(v.position.x, v.position.z)).toFixed(2) + ' m');
@@ -675,7 +681,6 @@ class Game {
     this.terrain.update(p.x, p.z);
     this.roads.ensureArea(p.x, p.z, this.device.mobile ? 1500 : ROAD_RADIUS);
     this.roadMesh.update(p.x, p.z);
-    this.buildings.ensureArea(p.x, p.z);
     this.buildings.update(p.x, p.z);
     this.atmosphere.update(p, dt);
     this.chase.update(this.vehicle, dt);

@@ -2,6 +2,8 @@
 // Le panneau de diagnostic est volontairement visible : quand quelque chose ne charge
 // pas, on doit le voir, pas le deviner.
 
+import { cellsAround } from '../world/cells.js';
+
 const MINIMAP_RANGE = 280; // metres representes du centre au bord
 
 const ROAD_STYLE = {
@@ -177,12 +179,9 @@ export class Hud {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    const cellSize = 1200;
-    const cx = Math.floor(px / cellSize);
-    const cz = Math.floor(pz / cellSize);
-    for (let dz = -1; dz <= 1; dz++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const ways = roads.wayCells.get(cx + dx + ',' + (cz + dz));
+    for (const cell of cellsAround(roads.proj, px, pz, 1)) {
+      {
+        const ways = roads.wayCells.get(cell.key);
         if (!ways) continue;
         for (const way of ways) {
           const b = way.bbox;

@@ -8,18 +8,13 @@
 // priorite basse : mieux vaut une route sans batiments qu'un decor sans route.
 
 import * as THREE from 'three';
-import { fetchWithTimeout } from '../core/net.js';
-import { ROAD_CELL } from './roads.js';
-
-const MIRRORS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-];
+import { cellsAround } from './cells.js';
 
 const LEVEL_HEIGHT = 3.1; // hauteur d'un etage, en metres
 const DEFAULT_LEVELS = 2;
-const MAX_PER_CELL = 1400; // au-dela, une cellule dense coute plus qu'elle n'apporte
-const MIN_AREA = 12; // m2 : sous ce seuil c'est un abri de jardin, on passe
+// Une cellule de centre-ville depasse aisement 3000 emprises, soit plus de
+// 200 000 triangles : de quoi mettre un GPU mobile a genoux pour des cabanons.
+// On garde les plus grandes, qui sont aussi celles qui structurent la vue.
 const HIT_GRID = 32; // maille de la grille de collision, en metres
 
 // Teintes de facade, tirees au sort de facon deterministe par batiment.
@@ -35,11 +30,12 @@ const ROOF_TINTS = [
 ];
 
 export class Buildings {
-  constructor({ scene, proj, ground, queue, radius = 1 }) {
+  constructor({ scene, proj, ground, radius = 1, maxPerCell = 1400, minArea = 12 }) {
     this.proj = proj;
     this.ground = ground;
-    this.queue = queue;
     this.radius = radius;
+    this.maxPerCell = maxPerCell;
+    this.minArea = minArea;
     this.enabled = true;
 
     this.group = new THREE.Group();
@@ -67,68 +63,24 @@ export class Buildings {
     this.group.visible = on;
   }
 
-  /** Charge les emprises autour du joueur. */
-  ensureArea(worldX, worldZ) {
-    if (!this.enabled) return;
-    const cx = Math.floor(worldX / ROAD_CELL);
-    const cz = Math.floor(worldZ / ROAD_CELL);
-    for (let dz = -this.radius; dz <= this.radius; dz++) {
-      for (let dx = -this.radius; dx <= this.radius; dx++) {
-        const key = cx + dx + ',' + (cz + dz);
-        if (this.cells.has(key)) continue;
-        this.cells.set(key, 'loading');
-        this._fetchCell(cx + dx, cz + dz, key);
-      }
-    }
-  }
-
-  _fetchCell(cx, cz, key) {
-    const m = 30;
-    const sw = this.proj.toLonLat(cx * ROAD_CELL - m, (cz + 1) * ROAD_CELL + m);
-    const ne = this.proj.toLonLat((cx + 1) * ROAD_CELL + m, cz * ROAD_CELL - m);
-    const bbox = sw.lat + ',' + sw.lon + ',' + ne.lat + ',' + ne.lon;
-    const query = '[out:json][timeout:50];way["building"](' + bbox + ');out geom;';
-
-    let attempt = 0;
-    const task = async () => {
-      const url = MIRRORS[attempt % MIRRORS.length];
-      attempt++;
-      const res = await fetchWithTimeout(
-        url,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(query),
-        },
-        55000
-      );
-      const json = await res.json();
-      if (json.remark && !(json.elements || []).length) throw new Error(json.remark);
-      return json;
-    };
-
-    // priorite volontairement mauvaise : les routes passent toujours devant
-    this.queue
-      .add('build:' + key, 5000, task)
-      .then((json) => {
-        this.cells.set(key, 'ready');
-        this.stats.cells++;
-        const parsed = this._parse(json.elements || []);
-        this.shapes.set(key, parsed);
-        for (const b of parsed) this._index(b);
-        this.stats.count += parsed.length;
-      })
-      .catch(() => {
-        this.cells.set(key, 'failed');
-        this.stats.failed++;
-      });
+  /**
+   * Recoit les emprises d'une cellule. Elles arrivent desormais dans la meme
+   * requete Overpass que les routes : ce module n'interroge plus le reseau.
+   */
+  ingest(cell, elements) {
+    if (this.cells.has(cell.key)) return;
+    this.cells.set(cell.key, 'ready');
+    this.stats.cells++;
+    const parsed = this._parse(elements);
+    for (const b of parsed) this._index(b);
+    this.shapes.set(cell.key, parsed);
+    this.stats.count += parsed.length;
   }
 
   _parse(elements) {
     const out = [];
     const tmp = [0, 0];
     for (const el of elements) {
-      if (out.length >= MAX_PER_CELL) break;
       if (el.type !== 'way' || !el.geometry || el.geometry.length < 4) continue;
 
       const pts = [];
@@ -141,10 +93,16 @@ export class Buildings {
       if (pts.length < 3) continue;
 
       const signed = THREE.ShapeUtils.area(pts);
-      if (Math.abs(signed) < MIN_AREA) continue;
+      const area = Math.abs(signed);
+      if (area < this.minArea) continue;
       if (signed < 0) pts.reverse(); // orientation uniforme pour tous les batiments
 
-      out.push({ id: el.id, pts, height: heightOf(el.tags || {}) });
+      out.push({ id: el.id, pts, area, height: heightOf(el.tags || {}) });
+    }
+
+    if (out.length > this.maxPerCell) {
+      out.sort((a, b) => b.area - a.area);
+      out.length = this.maxPerCell;
     }
     return out;
   }
@@ -217,18 +175,13 @@ export class Buildings {
   /** Construit et libere les maillages selon la position du joueur. */
   update(worldX, worldZ) {
     if (!this.enabled) return;
-    const cx = Math.floor(worldX / ROAD_CELL);
-    const cz = Math.floor(worldZ / ROAD_CELL);
     const wanted = new Set();
 
-    for (let dz = -this.radius; dz <= this.radius; dz++) {
-      for (let dx = -this.radius; dx <= this.radius; dx++) {
-        const key = cx + dx + ',' + (cz + dz);
-        const shapes = this.shapes.get(key);
-        if (!shapes || !shapes.length) continue;
-        wanted.add(key);
-        if (!this.meshes.has(key)) this._build(key, shapes);
-      }
+    for (const cell of cellsAround(this.proj, worldX, worldZ, this.radius)) {
+      const shapes = this.shapes.get(cell.key);
+      if (!shapes || !shapes.length) continue;
+      wanted.add(cell.key);
+      if (!this.meshes.has(cell.key)) this._build(cell.key, shapes);
     }
 
     for (const [key, mesh] of this.meshes) {

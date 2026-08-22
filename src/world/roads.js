@@ -7,6 +7,8 @@
 //     vers le terrain sur les bas-cotes.
 
 import { fetchWithTimeout } from '../core/net.js';
+import { store } from '../core/store.js';
+import { cellsAround, cellBoundsLonLat, cellSizeMetres, cellOfWorld } from './cells.js';
 
 // Choisir un miroir Overpass demande de verifier DEUX choses, et les deux ont deja
 // piege ce projet :
@@ -59,12 +61,9 @@ const LOOSE_SURFACES = new Set([
   'compacted', 'fine_gravel', 'earth', 'mud',
 ]);
 
-const CELL = 1200; // taille d'une cellule de streaming, en metres
 const STEP = 5; // pas de reechantillonnage le long d'une route, en metres
 const SHOULDER = 3.2; // largeur du raccord chaussee -> terrain, en metres
 const GRID = 48; // taille d'une cellule de la grille d'acceleration, en metres
-
-export const ROAD_CELL = CELL;
 
 export class RoadNetwork {
   constructor(proj, heightfield, queue) {
@@ -77,39 +76,47 @@ export class RoadNetwork {
     this.wayCells = new Map(); // "cx,cz" -> [way, ...] pour le regroupement du rendu
     this.dirty = false;
     this.onChange = null;
+    /** Les emprises de batiments voyagent dans la meme requete : on les relaie. */
+    this.onBuildings = null;
+    this._pendingBuildings = [];
     this.stats = { ways: 0, cells: 0, failed: 0, loading: 0 };
-  }
-
-  cellKey(cx, cz) {
-    return cx + ',' + cz;
   }
 
   /** Demande le chargement des cellules couvrant un disque autour du joueur. */
   ensureArea(worldX, worldZ, radius) {
-    const c0x = Math.floor((worldX - radius) / CELL);
-    const c1x = Math.floor((worldX + radius) / CELL);
-    const c0z = Math.floor((worldZ - radius) / CELL);
-    const c1z = Math.floor((worldZ + radius) / CELL);
-    for (let cz = c0z; cz <= c1z; cz++) {
-      for (let cx = c0x; cx <= c1x; cx++) {
-        const key = this.cellKey(cx, cz);
-        if (this.cells.has(key)) continue;
-        this.cells.set(key, 'loading');
-        this.stats.loading++;
-        const dist = Math.hypot((cx + 0.5) * CELL - worldX, (cz + 0.5) * CELL - worldZ);
-        this._fetchCell(cx, cz, key, dist);
-      }
+    const inCells = Math.max(1, Math.ceil(radius / cellSizeMetres(this.proj)));
+    for (const cell of cellsAround(this.proj, worldX, worldZ, inCells)) {
+      if (this.cells.has(cell.key)) continue;
+      this.cells.set(cell.key, 'loading');
+      this.stats.loading++;
+      this._loadCell(cell);
     }
   }
 
-  _fetchCell(cx, cz, key, priority) {
-    const m = 40; // marge : evite les routes coupees net a la frontiere de cellule
-    const sw = this.proj.toLonLat(cx * CELL - m, (cz + 1) * CELL + m);
-    const ne = this.proj.toLonLat((cx + 1) * CELL + m, cz * CELL - m);
-    const bbox = sw.lat + ',' + sw.lon + ',' + ne.lat + ',' + ne.lon;
+  /**
+   * Une seule requete par cellule, pour les routes ET les batiments.
+   *
+   * C'etaient deux requetes distinctes : deux fois plus de sollicitation d'un
+   * service benevole, pour exactement la meme emprise. Le resultat est mis en
+   * cache, donc une zone deja visitee ne repart plus du tout sur le reseau.
+   */
+  async _loadCell(cell) {
+    const cacheKey = 'ov:' + cell.key;
+    const cached = await store.get(cacheKey);
+    if (cached) {
+      this._acceptCell(cell, cached);
+      return;
+    }
+
+    const b = cellBoundsLonLat(cell.cx, cell.cz);
+    const m = 0.0004; // ~40 m de marge : evite les traces coupes net aux frontieres
+    const bbox =
+      b.south - m + ',' + (b.west - m) + ',' + (b.north + m) + ',' + (b.east + m);
     const query =
-      '[out:json][timeout:40];way["highway"]["highway"!~"' + EXCLUDED + '"]' +
-      '["area"!="yes"](' + bbox + ');out geom;';
+      '[out:json][timeout:60];(' +
+      'way["highway"]["highway"!~"' + EXCLUDED + '"]["area"!="yes"](' + bbox + ');' +
+      'way["building"](' + bbox + ');' +
+      ');out geom;';
 
     let attempt = 0;
     const task = async () => {
@@ -122,35 +129,64 @@ export class RoadNetwork {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(query),
         },
-        45000
+        60000
       );
       const json = await res.json();
       const count = (json.elements || []).length;
       // Overpass signale ses erreurs internes dans `remark`, avec un HTTP 200.
       if (json.remark && count === 0) throw new Error('overpass: ' + json.remark);
-      // Zero element peut vouloir dire "pas de route ici" comme "mauvais miroir".
-      // Tant qu'on n'a pas interroge tous les miroirs, on considere que c'est un echec.
+      // Zero element peut vouloir dire "rien ici" comme "mauvais miroir". Tant
+      // qu'on n'a pas interroge tous les miroirs, on considere que c'est un echec.
       if (count === 0 && attempt < MIRRORS.length) throw new Error('reponse vide');
-      return json;
+      return json.elements || [];
     };
 
     this.queue
-      .add('roads:' + key, priority, task)
-      .then((json) => {
-        this.cells.set(key, 'ready');
-        this.stats.cells++;
-        this.stats.loading--;
-        this._ingest(json.elements || []);
+      .add('cell:' + cell.key, cell.distance, task)
+      .then((elements) => {
+        store.set(cacheKey, elements);
+        this._acceptCell(cell, elements);
       })
       .catch(() => {
-        this.cells.set(key, 'failed');
+        this.cells.set(cell.key, 'failed');
         this.stats.failed++;
         this.stats.loading--;
-        // Nouvelle tentative differee : une cellule ratee n'est pas perdue definitivement.
+        // Une cellule ratee n'est pas perdue definitivement.
         setTimeout(() => {
-          if (this.cells.get(key) === 'failed') this.cells.delete(key);
+          if (this.cells.get(cell.key) === 'failed') this.cells.delete(cell.key);
         }, 20000);
       });
+  }
+
+  /**
+   * Branche le consommateur d'emprises, et lui remet l'arriere de file.
+   *
+   * Necessaire depuis la mise en cache : une cellule reprise du cache arrive
+   * instantanement, donc avant meme que le module des batiments n'existe. Sans
+   * cette reprise, les batiments d'une zone deja visitee disparaissaient.
+   */
+  setBuildingSink(fn) {
+    this.onBuildings = fn;
+    for (const p of this._pendingBuildings) fn(p.cell, p.elements);
+    this._pendingBuildings.length = 0;
+  }
+
+  /** Repartit les elements d'une cellule entre routes et batiments. */
+  _acceptCell(cell, elements) {
+    this.cells.set(cell.key, 'ready');
+    this.stats.cells++;
+    this.stats.loading--;
+
+    const roads = [];
+    const buildings = [];
+    for (const el of elements) {
+      if (!el.tags) continue;
+      if (el.tags.highway) roads.push(el);
+      else if (el.tags.building) buildings.push(el);
+    }
+    this._ingest(roads);
+    if (this.onBuildings) this.onBuildings(cell, buildings);
+    else this._pendingBuildings.push({ cell, elements: buildings });
   }
 
   _ingest(elements) {
@@ -162,7 +198,8 @@ export class RoadNetwork {
       if (!way) continue;
       this.ways.set(el.id, way);
       this._index(way);
-      const ck = Math.floor(way.pts[0] / CELL) + ',' + Math.floor(way.pts[1] / CELL);
+      const c = cellOfWorld(this.proj, way.pts[0], way.pts[1]);
+      const ck = c.cx + ',' + c.cz;
       let bucket = this.wayCells.get(ck);
       if (!bucket) this.wayCells.set(ck, (bucket = []));
       bucket.push(way);

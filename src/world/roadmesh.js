@@ -2,7 +2,7 @@
 // streaming pour garder le nombre d'appels de dessin tres bas.
 
 import * as THREE from 'three';
-import { ROAD_CELL } from './roads.js';
+import { cellsAround } from './cells.js';
 
 const LIFT = 0.07; // hauteur du ruban au-dessus du profil, en metres
 const TEX_LENGTH = 14; // longueur couverte par une repetition de la texture, en metres
@@ -70,31 +70,25 @@ export class RoadMesh {
   }
 
   update(playerX, playerZ) {
-    const cx = Math.floor(playerX / ROAD_CELL);
-    const cz = Math.floor(playerZ / ROAD_CELL);
-    const r = this.radius;
     const wanted = new Set();
     let tris = 0;
 
-    for (let dz = -r; dz <= r; dz++) {
-      for (let dx = -r; dx <= r; dx++) {
-        const key = cx + dx + ',' + (cz + dz);
-        const ways = this.roads.wayCells.get(key);
-        if (!ways || !ways.length) continue;
-        wanted.add(key);
-        const signature = ways.length + ':' + this.roads.hf.epoch;
-        let entry = this.cells.get(key);
-        if (!entry) {
-          entry = { meshes: {}, signature: null };
-          this.cells.set(key, entry);
-        }
-        if (entry.signature !== signature) {
-          entry.signature = signature;
-          this._build(entry, ways);
-        }
-        for (const m of Object.values(entry.meshes)) {
-          if (m) tris += m.geometry.index.count / 3;
-        }
+    for (const cell of cellsAround(this.roads.proj, playerX, playerZ, this.radius)) {
+      const ways = this.roads.wayCells.get(cell.key);
+      if (!ways || !ways.length) continue;
+      wanted.add(cell.key);
+      const signature = ways.length + ':' + this.roads.hf.epoch;
+      let entry = this.cells.get(cell.key);
+      if (!entry) {
+        entry = { meshes: {}, signature: null };
+        this.cells.set(cell.key, entry);
+      }
+      if (entry.signature !== signature) {
+        entry.signature = signature;
+        this._build(entry, ways);
+      }
+      for (const m of Object.values(entry.meshes)) {
+        if (m) tris += m.geometry.index.count / 3;
       }
     }
 
