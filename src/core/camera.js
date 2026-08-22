@@ -6,9 +6,10 @@ import * as THREE from 'three';
 const MODES = ['chase', 'hood', 'orbit'];
 
 export class ChaseCamera {
-  constructor(camera, ground) {
+  constructor(camera, ground, buildings = null) {
     this.camera = camera;
     this.ground = ground;
+    this.buildings = buildings;
     this.mode = 'chase';
     this.pos = new THREE.Vector3();
     this.look = new THREE.Vector3();
@@ -24,6 +25,7 @@ export class ChaseCamera {
     this._target = new THREE.Vector3();
     this._fwd = new THREE.Vector3();
     this._q = new THREE.Quaternion();
+    this._v2 = new THREE.Vector3();
     this._initialised = false;
   }
 
@@ -89,6 +91,24 @@ export class ChaseCamera {
     if (this.pos.y < floor) {
       this.pos.y = floor;
       if (this.vel.y < 0) this.vel.y = 0;
+    }
+
+    // Ni traverser un mur. La voiture, elle, est arretee par les facades ; sans
+    // ce garde-fou la camera s'y engouffre et l'ecran devient un aplat gris.
+    // On la ramene vers la voiture plutot que de la pousser lateralement : cela
+    // donne un recadrage naturel dans les rues etroites.
+    if (this.buildings) {
+      const push = this.buildings.resolve(this.pos.x, this.pos.z, 0.6);
+      if (push) {
+        const toCar = this._v2
+          .set(vehicle.position.x - this.pos.x, 0, vehicle.position.z - this.pos.z);
+        const len = toCar.length();
+        if (len > 1.2) {
+          const step = Math.min(len - 1.2, Math.hypot(push.x, push.z) + 0.4);
+          this.pos.addScaledVector(toCar.divideScalar(len), step);
+          this.vel.multiplyScalar(0.5);
+        }
+      }
     }
 
     // point vise : legerement devant la voiture

@@ -263,9 +263,10 @@ class Game {
     this.vehicle = new Vehicle(this.ground, { ...chosen.config, substep: q.substep });
     this.carView = new CarView(this.scene, this.vehicle, {
       color: chosen.colour,
+      shape: chosen.shape,
       skidPoints: q.skidPoints,
     });
-    this.chase = new ChaseCamera(this.camera, this.ground);
+    this.chase = new ChaseCamera(this.camera, this.ground, this.buildings);
     this.input = new Input();
 
     this.hud = new Hud(document.getElementById('hud'), { compact: this.device.mobile });
@@ -375,6 +376,18 @@ class Game {
     }
   }
 
+  /**
+   * Ecarte un point de depart des facades.
+   *
+   * Les emprises OSM chevauchent regulierement le trace des routes, et nos
+   * chaussees sont volontairement plus larges que la realite : sans cela on
+   * apparait dans un mur, ce qui se voit immediatement.
+   */
+  _clearOfBuildings(x, z) {
+    const push = this.buildings.resolve(x, z, this.vehicle.cfg.bodyWidth * 0.5 + 0.4);
+    return push ? { x: x + push.x, z: z + push.z } : { x, z };
+  }
+
   /** Place la voiture sur la route la plus proche, ou a defaut sur le terrain. */
   spawn() {
     const saved = this.recall();
@@ -393,8 +406,9 @@ class Game {
     }
     const near = this.roads.nearestRoad(0, 0, SPAWN_SEARCH);
     if (near) {
-      this.vehicle.placeAt(near.x, near.y, near.z, near.heading);
-      this.spawnPoint = { x: near.x, y: near.y, z: near.z, heading: near.heading };
+      const clear = this._clearOfBuildings(near.x, near.z);
+      this.vehicle.placeAt(clear.x, near.y, clear.z, near.heading);
+      this.spawnPoint = { x: clear.x, y: near.y, z: clear.z, heading: near.heading };
       this.spawnedOnRoad = true;
     } else {
       const y = this.ground.height(0, 0);
@@ -428,8 +442,9 @@ class Game {
 
     const near = this.roads.nearestRoad(0, 0, SPAWN_SEARCH);
     if (!near) return;
-    this.vehicle.placeAt(near.x, near.y, near.z, near.heading);
-    this.spawnPoint = { x: near.x, y: near.y, z: near.z, heading: near.heading };
+    const clear = this._clearOfBuildings(near.x, near.z);
+    this.vehicle.placeAt(clear.x, near.y, clear.z, near.heading);
+    this.spawnPoint = { x: clear.x, y: near.y, z: clear.z, heading: near.heading };
     this.spawnedOnRoad = true;
     this.hud.toast('Routes chargees : mise en place sur la chaussee');
   }
@@ -438,8 +453,10 @@ class Game {
   respawn() {
     const p = this.vehicle.position;
     const near = this.roads.nearestRoad(p.x, p.z, 500);
-    if (near) this.vehicle.placeAt(near.x, near.y, near.z, near.heading);
-    else this.vehicle.rightUp();
+    if (near) {
+      const clear = this._clearOfBuildings(near.x, near.z);
+      this.vehicle.placeAt(clear.x, near.y, clear.z, near.heading);
+    } else this.vehicle.rightUp();
     this.carView.skid.clear();
     this.hud.toast('Remis sur la route');
   }
@@ -537,6 +554,7 @@ class Game {
     this.vehicle = new Vehicle(this.ground, { ...entry.config, substep: this.quality.substep });
     this.carView = new CarView(this.scene, this.vehicle, {
       color: entry.colour,
+      shape: entry.shape,
       skidPoints: this.quality.skidPoints,
     });
     this.vehicle.placeAt(p.x, this.ground.height(p.x, p.z), p.z, heading);

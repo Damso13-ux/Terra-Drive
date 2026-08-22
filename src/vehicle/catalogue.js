@@ -8,6 +8,7 @@
 export const VEHICLES = [
   {
     id: 'citadine',
+    shape: 'citadine',
     name: 'Citadine',
     tagline: 'Legere, traction, sans prétention',
     description:
@@ -51,6 +52,7 @@ export const VEHICLES = [
   },
   {
     id: 'berline',
+    shape: 'berline',
     name: 'Berline sportive',
     tagline: 'Propulsion, équilibrée',
     description:
@@ -62,6 +64,7 @@ export const VEHICLES = [
   },
   {
     id: 'gt',
+    shape: 'gt',
     name: 'GT',
     tagline: 'Beaucoup trop de couple',
     description:
@@ -105,6 +108,7 @@ export const VEHICLES = [
   },
   {
     id: 'rallye',
+    shape: 'rallye',
     name: 'Rallye 4x4',
     tagline: 'Transmission intégrale, débattement long',
     description:
@@ -148,6 +152,7 @@ export const VEHICLES = [
   },
   {
     id: 'pickup',
+    shape: 'pickup',
     name: 'Pick-up',
     tagline: 'Lourd, haut, coupleux',
     description:
