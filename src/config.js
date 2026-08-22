@@ -8,16 +8,20 @@
  * IP. Renseigner une URL bascule sur les tuiles vectorielles, sans quota et bien
  * plus rapides.
  *
- * En pratique, il n'y a pas besoin d'editer ce fichier : l'adresse se colle
- * dans le panneau de reglages du jeu, section « Source des donnees ». La valeur
- * ci-dessous ne sert que de defaut, utile pour figer une adresse a la
- * publication.
+ * L'archive ci-dessous couvre toute la France metropolitaine, Corse comprise,
+ * en zoom 14 (4,5 Go sur Cloudflare R2). Hors de cette emprise, le jeu retombe
+ * seul sur Overpass.
+ *
+ * Cette valeur n'est qu'un defaut : le panneau de reglages du jeu, section
+ * « Source des donnees », la remplace sans toucher au code. La vider ramene a
+ * Overpass partout.
  *
  * L'hebergement doit accepter les requetes de plage (`Range`) et autoriser le
  * CORS : un bucket Cloudflare R2 avec domaine public convient, et son offre
  * gratuite (10 Go, sortie non facturee) couvre tres largement ce besoin.
  */
-const DEFAULT_TILES_URL = '';
+const DEFAULT_TILES_URL =
+  'https://pub-6bf0cf80774540b8b1a08c4a819e463d.r2.dev/france.pmtiles';
 
 /** Adresse saisie dans les reglages, prioritaire sur le defaut. */
 function storedTilesUrl() {
