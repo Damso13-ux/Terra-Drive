@@ -9,6 +9,7 @@
 import { fetchWithTimeout } from '../core/net.js';
 import { store } from '../core/store.js';
 import { cellsAround, cellBoundsLonLat, cellSizeMetres, cellOfWorld } from './cells.js';
+import { TILES_URL } from '../config.js';
 
 // Choisir un miroir Overpass demande de verifier DEUX choses, et les deux ont deja
 // piege ce projet :
@@ -79,10 +80,15 @@ const SHOULDER = 3.2; // largeur du raccord chaussee -> terrain, en metres
 const GRID = 48; // taille d'une cellule de la grille d'acceleration, en metres
 
 export class RoadNetwork {
-  constructor(proj, heightfield, queue) {
+  constructor(proj, heightfield, queue, fastQueue = queue) {
     this.proj = proj;
     this.hf = heightfield;
     this.queue = queue;
+    // Les tuiles vectorielles sortent d'un CDN : elles supportent bien plus de
+    // parallelisme qu'Overpass, qui se ferme des qu'on le bouscule.
+    this.fastQueue = fastQueue;
+    this.vector = null;
+    this.source = TILES_URL ? 'tuiles' : 'overpass';
     this.cells = new Map(); // "cx,cz" -> 'loading' | 'ready' | 'failed'
     this.ways = new Map(); // osm id -> way
     this.grid = new Map(); // "gx,gz" -> [way, segIndex, way, segIndex, ...]
@@ -116,14 +122,16 @@ export class RoadNetwork {
    * cache, donc une zone deja visitee ne repart plus du tout sur le reseau.
    */
   async _loadCell(cell) {
-    // v2 : la requete ramene desormais aussi les surfaces boisees, donc les
-    // entrees de la version precedente sont incompletes.
-    const cacheKey = 'ov2:' + cell.key;
+    // Le prefixe distingue les deux origines : leurs elements n'ont pas le meme
+    // niveau de detail, il ne faut surtout pas les melanger dans le cache.
+    const cacheKey = (TILES_URL ? 'vt1:' : 'ov2:') + cell.key;
     const cached = await store.get(cacheKey);
     if (cached) {
       this._acceptCell(cell, cached);
       return;
     }
+
+    if (TILES_URL && (await this._loadFromTiles(cell, cacheKey))) return;
 
     const b = cellBoundsLonLat(cell.cx, cell.cz);
     const m = 0.0004; // ~40 m de marge : evite les traces coupes net aux frontieres
@@ -196,6 +204,35 @@ export class RoadNetwork {
     this.onVegetation = fn;
     for (const p of this._pendingVegetation) fn(p.cell, p.elements);
     this._pendingVegetation.length = 0;
+  }
+
+  /**
+   * Charge une cellule depuis l'archive de tuiles vectorielles.
+   * @returns true si la cellule a ete servie ; false pour retomber sur Overpass.
+   */
+  async _loadFromTiles(cell, cacheKey) {
+    try {
+      if (!this.vector) {
+        const { VectorSource } = await import('./vectorsource.js');
+        this.vector = new VectorSource(TILES_URL);
+      }
+      if (!(await this.vector.available())) {
+        this.source = 'overpass (tuiles injoignables)';
+        return false;
+      }
+
+      const bounds = cellBoundsLonLat(cell.cx, cell.cz);
+      const elements = await this.fastQueue.add('vt:' + cell.key, cell.distance, () =>
+        this.vector.fetchCell(bounds)
+      );
+      store.set(cacheKey, elements);
+      this._acceptCell(cell, elements);
+      return true;
+    } catch (err) {
+      // Une archive absente ou mal servie ne doit pas priver le jeu de routes.
+      this.source = 'overpass (repli)';
+      return false;
+    }
   }
 
   /** Repartit les elements d'une cellule entre routes et batiments. */

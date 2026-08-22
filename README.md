@@ -208,6 +208,72 @@ Tout passe par des maillages instanciés : un seul appel de dessin par cellule,
 quel que soit le nombre d'arbres. La densité est respectée exactement (vérifié :
 3,12 ha à 26 arbres/ha donnent 81 arbres).
 
+### Tuiles vectorielles (optionnel, mais recommandé)
+
+Overpass reste le mode par défaut : aucune configuration. Mais c'est un service
+bénévole limité par adresse IP, et il redevient le goulot dès qu'on roule vite ou
+qu'on explore. Renseigner une archive **PMTiles** dans `src/config.js` le
+remplace : même donnée OpenStreetMap, pré-découpée, servie par un CDN, sans quota.
+
+Le basculement est transparent — l'adaptateur rend des éléments strictement au
+même format qu'une réponse Overpass, donc routes, bâtiments et végétation n'ont
+pas changé d'une ligne. Si l'archive est injoignable, le jeu retombe tout seul
+sur Overpass.
+
+**1. Récupérer la CLI.** `pmtiles` est un binaire Go autonome — pas besoin de
+Node. [Releases go-pmtiles](https://github.com/protomaps/go-pmtiles/releases),
+prendre `windows-amd64`.
+
+**2. Extraire ta région** depuis la construction planétaire quotidienne. Seuls
+les octets utiles sont téléchargés, pas les 137 Go du fichier complet :
+
+```bash
+pmtiles extract https://build.protomaps.com/20260820.pmtiles paca.pmtiles --bbox=4.20,42.90,7.80,44.60 --maxzoom=15 --download-threads=8
+```
+
+> Les constructions quotidiennes ne sont conservées que quelques jours : vérifie
+> laquelle existe avant de lancer la commande. Commence par une emprise réduite
+> pour jauger le poids — `pmtiles show paca.pmtiles` le rapporte.
+
+**3. Créer le bucket R2** sur Cloudflare, y déposer le fichier, puis activer
+l'accès public (sous-domaine `r2.dev` ou domaine personnalisé).
+
+**4. Configurer le CORS du bucket.** C'est l'étape qu'on oublie, et sans elle le
+navigateur refuse les requêtes de plage :
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://damso13-ux.github.io", "http://localhost:8123"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["range", "if-match"],
+    "ExposeHeaders": ["etag", "content-range", "content-length"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+**5. Renseigner l'URL** publique dans `TILES_URL`, dans `src/config.js`.
+
+#### Ce que ça coûte
+
+L'offre gratuite de R2 donne 10 Go de stockage, 1 M d'opérations d'écriture,
+10 M de lectures par mois, et **ne facture pas la bande passante sortante**. Une
+lecture de tuile vaut une ou deux requêtes de plage : le plafond est très loin
+pour un usage personnel.
+
+#### Ce qu'on perd
+
+Le schéma Protomaps conserve la valeur OSM complète dans `kind` (`motorway`,
+`track`, `residential`…), ainsi que `name`, `is_bridge` et `is_tunnel` : les
+familles de route continuent donc de fonctionner à l'identique.
+
+En revanche `surface`, `smoothness`, `lanes` et `width` sont perdus. Concrètement,
+**une départementale en gravier passera pour une route revêtue**. C'est le prix
+de la généralisation. Pour les récupérer il faudrait produire son propre jeu de
+tuiles avec planetiler ou tippecanoe, en choisissant le schéma — un chantier à
+part entière.
+
 ### Ménager Overpass
 
 L'API Overpass publique est un service bénévole, limité par adresse IP. Trois

@@ -187,7 +187,7 @@ class Game {
     this.roadQueue = new RequestQueue({ concurrency: 2, retries: 4, baseDelay: 1400 });
 
     this.heightfield = new Heightfield(this.proj, this.queue);
-    this.roads = new RoadNetwork(this.proj, this.heightfield, this.roadQueue);
+    this.roads = new RoadNetwork(this.proj, this.heightfield, this.roadQueue, this.queue);
     this.ground = new Ground(this.heightfield, this.roads);
 
     // ---- 1. filet de securite altimetrique -------------------------------
@@ -471,7 +471,8 @@ class Game {
     L.push('routes ' + this.roads.stats.ways + ', rubans ' + this.roadMesh.stats.tris + ' tri');
     L.push('batiments ' + this.buildings.stats.count + ' sur ' + this.buildings.stats.cells + ' cellules');
     L.push('arbres ' + this.vegetation.stats.trees);
-    L.push('cache overpass ' + store.hits + ' repris / ' + store.misses + ' manques');
+    L.push('source ' + this.roads.source);
+    L.push('cache ' + store.hits + ' repris / ' + store.misses + ' manques');
     L.push('altitude ' + ['ABSENTE', 'approchee', 'fine'][this.heightfield.lastQuality]);
     L.push('sol ' + this.ground.height(v.position.x, v.position.z).toFixed(0) + ' m');
     L.push('voiture/sol ' + (v.position.y - this.ground.height(v.position.x, v.position.z)).toFixed(2) + ' m');
