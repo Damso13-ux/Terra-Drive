@@ -6,7 +6,7 @@
 // immediatement comme une voiture, la ou un materiau unique donne un jouet.
 
 import * as THREE from 'three';
-import { loft, scaleStations, buildWheel, SHAPES } from './bodywork.js';
+import { loft, scaleStations, buildWheel, buildArch, SHAPES } from './bodywork.js';
 
 export class CarView {
   constructor(scene, vehicle, { color = 0xd23c2e, shape = 'berline', skidPoints = 2400 } = {}) {
@@ -43,6 +43,21 @@ export class CarView {
     this.cabin = cabin;
 
     for (const piece of this._trim(c)) this.group.add(piece);
+
+    // ---- passages de roue --------------------------------------------------
+    // Fixes sur la caisse, et non solidaires de la roue : une arche ne monte
+    // pas et ne descend pas avec la suspension.
+    const archGeo = buildArch(c.wheelRadius, c.wheelRadius * 0.085);
+    for (const w of vehicle.wheels) {
+      const arch = new THREE.Mesh(archGeo, this.materials.plastic);
+      arch.position.set(
+        w.local.x * 1.03,
+        w.local.y - c.suspensionRest * 0.72,
+        w.local.z
+      );
+      arch.castShadow = true;
+      this.group.add(arch);
+    }
 
     // ---- roues -------------------------------------------------------------
     const wheel = buildWheel(c.wheelRadius, c.wheelWidth);
@@ -186,11 +201,13 @@ function makeMaterials(colour) {
       clearcoatRoughness: 0.07,
     }),
     glass: new THREE.MeshPhysicalMaterial({
-      color: 0x0d151d,
-      metalness: 0.35,
-      roughness: 0.05,
+      // 0.82 donnait un bloc noir pose sur la caisse : un vitrage doit laisser
+      // deviner l'habitacle et refleter le ciel, pas boucher la silhouette.
+      color: 0x1b2a38,
+      metalness: 0.45,
+      roughness: 0.04,
       transparent: true,
-      opacity: 0.82,
+      opacity: 0.68,
       side: THREE.DoubleSide,
     }),
     rubber: new THREE.MeshStandardMaterial({ color: 0x121316, roughness: 0.96, metalness: 0 }),

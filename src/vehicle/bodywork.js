@@ -44,7 +44,7 @@ function outline(halfW, yLow, yHigh, n, round) {
  */
 export function loft(stations, segments = 22) {
   const rings = stations.map((s) =>
-    outline(s.halfW, s.yLow, s.yHigh, segments, s.round ?? 6.2)
+    outline(s.halfW, s.yLow, s.yHigh, segments, s.round ?? 3.6)
   );
 
   const positions = [];
@@ -57,9 +57,13 @@ export function loft(stations, segments = 22) {
     const zb = stations[k + 1].z;
     for (let i = 0; i < segments; i++) {
       const j = (i + 1) % segments;
-      // deux triangles par facette
-      push(a, i, za); push(b, i, zb); push(b, j, zb);
-      push(a, i, za); push(b, j, zb); push(a, j, za);
+      // Deux triangles par facette. L'ORDRE COMPTE : les contours sont
+      // parcourus dans le sens trigonometrique et z croit vers l'arriere, si
+      // bien que l'enroulement naif sort une normale vers l'INTERIEUR. La face
+      // exterieure est alors eliminee et l'on voit l'interieur du flanc oppose
+      // — la carrosserie parait translucide.
+      push(a, i, za); push(b, j, zb); push(b, i, zb);
+      push(a, i, za); push(a, j, za); push(b, j, zb);
     }
   }
 
@@ -77,8 +81,9 @@ export function loft(stations, segments = 22) {
       }
     }
   };
-  cap(rings[0], stations[0].z, true);
-  cap(rings[rings.length - 1], stations[stations.length - 1].z, false);
+  // les bouchons suivent le meme sens que les flancs
+  cap(rings[0], stations[0].z, false);
+  cap(rings[rings.length - 1], stations[stations.length - 1].z, true);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -103,7 +108,8 @@ export const SHAPES = {
       { z: 0.04, halfW: 0.51, yLow: 0.21, yHigh: 0.64 },
       { z: 0.28, halfW: 0.50, yLow: 0.22, yHigh: 0.64 },
       { z: 0.44, halfW: 0.46, yLow: 0.26, yHigh: 0.62 },
-      { z: 0.50, halfW: 0.39, yLow: 0.32, yHigh: 0.58 },
+      { z: 0.485, halfW: 0.37, yLow: 0.31, yHigh: 0.58 },
+      { z: 0.50, halfW: 0.28, yLow: 0.35, yHigh: 0.54 },
     ],
     // habitacle avance et haut : c'est la signature d'une citadine
     cabin: [
@@ -124,7 +130,8 @@ export const SHAPES = {
       { z: 0.00, halfW: 0.51, yLow: 0.20, yHigh: 0.58 },
       { z: 0.22, halfW: 0.50, yLow: 0.20, yHigh: 0.58 },
       { z: 0.40, halfW: 0.47, yLow: 0.23, yHigh: 0.55 },
-      { z: 0.50, halfW: 0.40, yLow: 0.28, yHigh: 0.50 },
+      { z: 0.485, halfW: 0.38, yLow: 0.27, yHigh: 0.50 },
+      { z: 0.50, halfW: 0.29, yLow: 0.31, yHigh: 0.46 },
     ],
     cabin: [
       { z: -0.14, halfW: 0.38, yLow: 0.55, yHigh: 0.60, round: 3.2 },
@@ -144,7 +151,8 @@ export const SHAPES = {
       { z: 0.06, halfW: 0.52, yLow: 0.18, yHigh: 0.62 },
       { z: 0.28, halfW: 0.51, yLow: 0.19, yHigh: 0.62 },
       { z: 0.44, halfW: 0.47, yLow: 0.21, yHigh: 0.58 },
-      { z: 0.50, halfW: 0.41, yLow: 0.25, yHigh: 0.53 },
+      { z: 0.485, halfW: 0.39, yLow: 0.24, yHigh: 0.53 },
+      { z: 0.50, halfW: 0.30, yLow: 0.28, yHigh: 0.49 },
     ],
     // pavillon recule et ecrase : le profil d'un coupe
     cabin: [
@@ -164,7 +172,8 @@ export const SHAPES = {
       { z: 0.06, halfW: 0.52, yLow: 0.23, yHigh: 0.66 },
       { z: 0.30, halfW: 0.51, yLow: 0.24, yHigh: 0.66 },
       { z: 0.44, halfW: 0.47, yLow: 0.28, yHigh: 0.64 },
-      { z: 0.50, halfW: 0.40, yLow: 0.34, yHigh: 0.60 },
+      { z: 0.485, halfW: 0.38, yLow: 0.33, yHigh: 0.60 },
+      { z: 0.50, halfW: 0.29, yLow: 0.37, yHigh: 0.56 },
     ],
     cabin: [
       { z: -0.18, halfW: 0.40, yLow: 0.63, yHigh: 0.68, round: 3.4 },
@@ -214,6 +223,20 @@ export function scaleStations(stations, length, width, height, yOffset = 0) {
     yHigh: s.yHigh * height - yOffset,
     round: s.round,
   }));
+}
+
+/**
+ * Passage de roue : un demi-anneau pose sur le flanc.
+ *
+ * Sans lui, la roue emerge d'une surface peinte pleine et se lit comme un disque
+ * flottant dans la carrosserie. L'arche donne le creux que l'oeil attend, sans
+ * avoir a decouper reellement la caisse.
+ */
+export function buildArch(radius, thickness) {
+  const arch = new THREE.TorusGeometry(radius * 1.16, thickness, 7, 18, Math.PI);
+  // le tore est dans le plan XY, axe Z : on l'amene axe X, ouverture vers le bas
+  arch.rotateY(Math.PI / 2);
+  return arch;
 }
 
 /**
