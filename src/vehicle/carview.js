@@ -6,7 +6,7 @@
 // immediatement comme une voiture, la ou un materiau unique donne un jouet.
 
 import * as THREE from 'three';
-import { loft, scaleStations, buildWheel, buildArch, SHAPES } from './bodywork.js';
+import { loft, scaleStations, buildWheel, buildArch, roofFromCabin, SHAPES } from './bodywork.js';
 
 export class CarView {
   constructor(scene, vehicle, { color = 0xd23c2e, shape = 'berline', skidPoints = 2400 } = {}) {
@@ -42,12 +42,23 @@ export class CarView {
     this.group.add(cabin);
     this.cabin = cabin;
 
+    // ---- pavillon ----------------------------------------------------------
+    const roofStations = roofFromCabin(silhouette.cabin);
+    if (roofStations) {
+      const roof = new THREE.Mesh(
+        loft(scaleStations(roofStations, c.bodyLength, c.bodyWidth, c.bodyHeight, drop)),
+        this.materials.paint
+      );
+      roof.castShadow = true;
+      this.group.add(roof);
+    }
+
     for (const piece of this._trim(c)) this.group.add(piece);
 
     // ---- passages de roue --------------------------------------------------
     // Fixes sur la caisse, et non solidaires de la roue : une arche ne monte
     // pas et ne descend pas avec la suspension.
-    const archGeo = buildArch(c.wheelRadius, c.wheelRadius * 0.085);
+    const archGeo = buildArch(c.wheelRadius, c.wheelRadius * 0.055);
     for (const w of vehicle.wheels) {
       const arch = new THREE.Mesh(archGeo, this.materials.plastic);
       arch.position.set(
@@ -131,16 +142,19 @@ export class CarView {
       add(new THREE.BoxGeometry(W * 0.17, H * 0.05, L * 0.014), this.materials.head, s * W * 0.31, H * 0.455, -L * 0.472);
       add(new THREE.BoxGeometry(W * 0.18, H * 0.045, L * 0.012), this.materials.brake, s * W * 0.31, H * 0.465, L * 0.472);
       // retroviseur : bras puis coque
-      add(new THREE.BoxGeometry(W * 0.055, H * 0.015, L * 0.01), this.materials.plastic, s * W * 0.48, H * 0.615, -L * 0.14);
-      add(new THREE.BoxGeometry(W * 0.04, H * 0.042, L * 0.018), this.materials.paint, s * W * 0.52, H * 0.625, -L * 0.14);
+      // le bras part du flanc (a 0,51 de largeur) et porte la coque au-dela
+      add(new THREE.BoxGeometry(W * 0.09, H * 0.014, L * 0.009), this.materials.plastic, s * W * 0.545, H * 0.60, -L * 0.13);
+      add(new THREE.BoxGeometry(W * 0.05, H * 0.045, L * 0.02), this.materials.paint, s * W * 0.60, H * 0.615, -L * 0.13);
     }
 
-    // troisieme feu stop, en haut de la lunette
-    add(new THREE.BoxGeometry(W * 0.3, H * 0.014, L * 0.012), this.materials.brake, 0, H * 0.86, L * 0.4);
+    // Troisieme feu stop, plaque en haut de la lunette. Il flottait 39 cm
+    // au-dessus du coffre, ce qui se lisait comme une antenne.
+    add(new THREE.BoxGeometry(W * 0.26, H * 0.012, L * 0.01), this.materials.brake, 0, H * 0.60, L * 0.33);
 
     const pipe = new THREE.CylinderGeometry(H * 0.032, H * 0.032, L * 0.05, 10);
     pipe.rotateX(Math.PI / 2);
-    add(pipe, this.materials.chrome, W * 0.3, H * 0.26, L * 0.49);
+    // en acier : le chrome refletait le ciel et donnait un cylindre bleu vif
+    add(pipe, this.materials.steel, W * 0.28, H * 0.255, L * 0.455);
 
     add(new THREE.BoxGeometry(W * 0.24, H * 0.045, L * 0.006), this.materials.plate, 0, H * 0.34, L * 0.474);
 

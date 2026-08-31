@@ -226,6 +226,33 @@ export function scaleStations(stations, length, width, height, yOffset = 0) {
 }
 
 /**
+ * Pavillon, deduit des sections de l'habitacle.
+ *
+ * Sans lui, l'habitacle est vitre du bas de caisse jusqu'au sommet et se lit
+ * comme une bulle de plexiglas. Sur une voiture, le toit est peint : seules les
+ * vitres sont transparentes. C'est ce contraste qui fait lire la silhouette.
+ *
+ * On ne garde que les sections proches du point haut — celles qui portent
+ * reellement le toit — et on les rabaisse en une calotte mince.
+ */
+export function roofFromCabin(cabin) {
+  let peak = 0;
+  for (const s of cabin) peak = Math.max(peak, s.yHigh);
+  const floor = peak * 0.88;
+
+  const kept = cabin.filter((s) => s.yHigh > floor);
+  if (kept.length < 2) return null;
+
+  return kept.map((s) => ({
+    z: s.z,
+    halfW: s.halfW * 0.985,
+    yLow: floor,
+    yHigh: s.yHigh * 1.004, // affleure le vitrage, sans le percer
+    round: 4.4,
+  }));
+}
+
+/**
  * Passage de roue : un demi-anneau pose sur le flanc.
  *
  * Sans lui, la roue emerge d'une surface peinte pleine et se lit comme un disque
@@ -233,7 +260,7 @@ export function scaleStations(stations, length, width, height, yOffset = 0) {
  * avoir a decouper reellement la caisse.
  */
 export function buildArch(radius, thickness) {
-  const arch = new THREE.TorusGeometry(radius * 1.16, thickness, 7, 18, Math.PI);
+  const arch = new THREE.TorusGeometry(radius * 1.08, thickness, 6, 16, Math.PI);
   // le tore est dans le plan XY, axe Z : on l'amene axe X, ouverture vers le bas
   arch.rotateY(Math.PI / 2);
   return arch;
