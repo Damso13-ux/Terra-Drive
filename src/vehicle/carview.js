@@ -6,7 +6,7 @@
 // immediatement comme une voiture, la ou un materiau unique donne un jouet.
 
 import * as THREE from 'three';
-import { loft, scaleStations, buildWheel, buildArch, roofFromCabin, SHAPES } from './bodywork.js';
+import { loft, densify, scaleStations, buildWheel, roofFromCabin, SHAPES } from './bodywork.js';
 
 export class CarView {
   constructor(scene, vehicle, { color = 0xd23c2e, shape = 'berline', skidPoints = 2400 } = {}) {
@@ -24,11 +24,64 @@ export class CarView {
     // centre de gravite. C'est ce decalage qui pose la caisse sur ses roues.
     const drop = vehicle.rideHeight;
 
-    // ---- caisse ------------------------------------------------------------
-    const body = new THREE.Mesh(
-      loft(scaleStations(silhouette.body, c.bodyLength, c.bodyWidth, c.bodyHeight, drop)),
-      this.materials.paint
+    // ---- caisse, passages de roue creuses -----------------------------------
+    //
+    // La roue est a track/2 du centre, la carrosserie va plus loin encore : sans
+    // creusement elle est purement et simplement noyee dans la peinture. On
+    // rentre donc le flanc sous la ligne d'arche jusqu'a la paroi du logement.
+    // Centre de roue dans le repere du maillage.
+    //
+    // `scaleStations` mesure les hauteurs depuis le SOL puis retranche `drop` :
+    // le sol est donc a -drop, et le moyeu un rayon plus haut. Repartir de
+    // `wheelAttachY`, qui est deja dans le repere du centre de gravite, revient
+    // a compter le decalage deux fois et envoie l'arche sous la voiture.
+    const wheelY = c.wheelRadius - drop;
+    const bodyStations = densify(
+      scaleStations(silhouette.body, c.bodyLength, c.bodyWidth, c.bodyHeight, drop),
+      84 // assez de sections pour que le bord d'aile soit net, non en marches
     );
+
+    // Le rayon d'arche est borne par la tole reellement disponible au-dessus de
+    // la roue : sur une caisse basse, un rayon fixe fait sortir l'ouverture par
+    // le haut du flanc et sectionne l'aile.
+    const topAt = (z) => {
+      let best = bodyStations[0];
+      for (const st of bodyStations) {
+        if (Math.abs(st.z - z) < Math.abs(best.z - z)) best = st;
+      }
+      return best.yHigh;
+    };
+    const archRadius = (z) => {
+      const room = topAt(z) - wheelY - 0.05; // tole a garder au-dessus du pneu
+      if (room < c.wheelRadius + 0.02) {
+        // La caisse est trop basse pour ses jantes : l'arche ne peut pas
+        // degager le pneu, qui ressortira par le haut de l'aile. C'est une
+        // incoherence de configuration, pas un accident de rendu.
+        console.warn(
+          `[carview] ${c.id ?? 'vehicule'} : aile trop basse, ` +
+            `${(room * 100).toFixed(0)} cm pour un pneu de ` +
+            `${(c.wheelRadius * 100).toFixed(0)} cm`
+        );
+      }
+      return Math.min(c.wheelRadius * 1.14, room);
+    };
+
+    const wells = {
+      wheels: [
+        { z: -c.wheelBase / 2, y: wheelY, radius: archRadius(-c.wheelBase / 2) },
+        { z: c.wheelBase / 2, y: wheelY, radius: archRadius(c.wheelBase / 2) },
+      ],
+      // Paroi juste EN DEDANS DE LA FACE EXTERNE du pneu, pas de sa face
+      // interne : sur une voiture la roue affleure l'aile. Reculer le flanc
+      // jusqu'a la face interne creuserait une caverne de 30 cm dans laquelle
+      // la roue flotterait, au fond d'une ombre noire.
+      houseHalfW: Math.min(
+        c.track / 2 + c.wheelWidth / 2 - 0.05,
+        c.bodyWidth / 2 - 0.05
+      ),
+    };
+
+    const body = new THREE.Mesh(loft(bodyStations, 22, wells), this.materials.paint);
     body.castShadow = true;
     body.receiveShadow = true;
     this.group.add(body);
@@ -54,21 +107,6 @@ export class CarView {
     }
 
     for (const piece of this._trim(c)) this.group.add(piece);
-
-    // ---- passages de roue --------------------------------------------------
-    // Fixes sur la caisse, et non solidaires de la roue : une arche ne monte
-    // pas et ne descend pas avec la suspension.
-    const archGeo = buildArch(c.wheelRadius, c.wheelRadius * 0.055);
-    for (const w of vehicle.wheels) {
-      const arch = new THREE.Mesh(archGeo, this.materials.plastic);
-      arch.position.set(
-        w.local.x * 1.03,
-        w.local.y - c.suspensionRest * 0.72,
-        w.local.z
-      );
-      arch.castShadow = true;
-      this.group.add(arch);
-    }
 
     // ---- roues -------------------------------------------------------------
     const wheel = buildWheel(c.wheelRadius, c.wheelWidth);

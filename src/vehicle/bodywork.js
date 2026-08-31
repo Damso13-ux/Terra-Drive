@@ -19,7 +19,7 @@ import * as THREE from 'three';
  * @param yHigh haut de la section
  * @param round 2 = ellipse pure, 8 = quasi rectangulaire. 4 a 5 pour une caisse.
  */
-function outline(halfW, yLow, yHigh, n, round) {
+function outline(halfW, yLow, yHigh, n, round, isOpen, houseHalfW) {
   const cy = (yLow + yHigh) / 2;
   const halfH = (yHigh - yLow) / 2;
   const pts = [];
@@ -28,12 +28,46 @@ function outline(halfW, yLow, yHigh, n, round) {
     const a = (i / n) * Math.PI * 2;
     const c = Math.cos(a);
     const s = Math.sin(a);
-    pts.push(
-      Math.sign(c) * Math.pow(Math.abs(c), e) * halfW,
-      cy + Math.sign(s) * Math.pow(Math.abs(s), e) * halfH
-    );
+    let x = Math.sign(c) * Math.pow(Math.abs(c), e) * halfW;
+    const y = cy + Math.sign(s) * Math.pow(Math.abs(s), e) * halfH;
+    // Creusement du passage de roue : dans l'ouverture, le flanc rentre jusqu'a
+    // la paroi du logement. C'est ce qui fait un vrai creux d'aile, la ou un
+    // anneau pose par-dessus ne trompe personne.
+    if (isOpen !== null && isOpen(y) && Math.abs(x) > houseHalfW) {
+      x = Math.sign(x) * houseHalfW;
+    }
+    pts.push(x, y);
   }
   return pts;
+}
+
+/**
+ * Densifie une suite de sections par interpolation lineaire.
+ *
+ * Indispensable avant de creuser : avec huit sections sur toute la longueur,
+ * une arche tomberait entre deux et produirait une marche au lieu d'un arrondi.
+ */
+export function densify(stations, count) {
+  const z0 = stations[0].z;
+  const z1 = stations[stations.length - 1].z;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const z = z0 + ((z1 - z0) * i) / (count - 1);
+    let k = 0;
+    while (k < stations.length - 2 && stations[k + 1].z < z) k++;
+    const a = stations[k];
+    const b = stations[k + 1];
+    const t = b.z === a.z ? 0 : (z - a.z) / (b.z - a.z);
+    const mix = (u, v) => u + (v - u) * t;
+    out.push({
+      z,
+      halfW: mix(a.halfW, b.halfW),
+      yLow: mix(a.yLow, b.yLow),
+      yHigh: mix(a.yHigh, b.yHigh),
+      round: mix(a.round ?? 3.6, b.round ?? 3.6),
+    });
+  }
+  return out;
 }
 
 /**
@@ -42,10 +76,42 @@ function outline(halfW, yLow, yHigh, n, round) {
  * @param stations [{ z, halfW, yLow, yHigh, round }]
  * @param segments points par contour
  */
-export function loft(stations, segments = 22) {
-  const rings = stations.map((s) =>
-    outline(s.halfW, s.yLow, s.yHigh, segments, s.round ?? 3.6)
-  );
+export function loft(stations, segments = 22, wells = null) {
+  const rings = stations.map((s) => {
+    let isOpen = null;
+    if (wells) {
+      const near = [];
+      for (const w of wells.wheels) {
+        const d = Math.abs(s.z - w.z);
+        if (d < w.radius) near.push({ d, y: w.y, r: w.radius });
+      }
+      if (near.length) {
+        // Contour de l'ouverture d'aile : demi-cercle au-dessus du moyeu, puis
+        // deux bords presque verticaux qui redescendent au bas de caisse.
+        //
+        // Creuser tout ce qui est sous la ligne d'arche — reflexe naturel —
+        // evide aussi les zones situees devant et derriere le pneu, la ou rien
+        // ne vient remplir le trou : la voiture se retrouve flanquee de deux
+        // croissants noirs.
+        isOpen = (y) =>
+          near.some((w) => {
+            const dy = y - w.y;
+            return dy >= 0
+              ? w.d * w.d + dy * dy < w.r * w.r
+              : w.d < w.r * 0.84;
+          });
+      }
+    }
+    return outline(
+      s.halfW,
+      s.yLow,
+      s.yHigh,
+      segments,
+      s.round ?? 3.6,
+      isOpen,
+      wells ? wells.houseHalfW : 0
+    );
+  });
 
   const positions = [];
   const push = (ring, i, z) => positions.push(ring[i * 2], ring[i * 2 + 1], z);
@@ -250,20 +316,6 @@ export function roofFromCabin(cabin) {
     yHigh: s.yHigh * 1.004, // affleure le vitrage, sans le percer
     round: 4.4,
   }));
-}
-
-/**
- * Passage de roue : un demi-anneau pose sur le flanc.
- *
- * Sans lui, la roue emerge d'une surface peinte pleine et se lit comme un disque
- * flottant dans la carrosserie. L'arche donne le creux que l'oeil attend, sans
- * avoir a decouper reellement la caisse.
- */
-export function buildArch(radius, thickness) {
-  const arch = new THREE.TorusGeometry(radius * 1.08, thickness, 6, 16, Math.PI);
-  // le tore est dans le plan XY, axe Z : on l'amene axe X, ouverture vers le bas
-  arch.rotateY(Math.PI / 2);
-  return arch;
 }
 
 /**

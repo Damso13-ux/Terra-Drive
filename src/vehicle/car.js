@@ -15,7 +15,7 @@ export const DEFAULT_CONFIG = {
   track: 1.58,
   cgHeight: 0.52,
   bodyLength: 4.35,
-  bodyWidth: 1.82,
+  bodyWidth: 1.88,
   bodyHeight: 1.36,
 
   wheelRadius: 0.34,
